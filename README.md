@@ -4,7 +4,7 @@ CLI aplikace pro správu PPC kampaní na **Seznam Sklik** přes [API Drak](https
 
 Pokrývá kompletní životní cyklus *search* i *obsahových* kampaní — kampaně, sestavy, klíčová slova, inzeráty, vylučující slova, výzkum klíčových slov, statistiky — plus měření konverzí, retargetingová publika, cílení (regiony / zařízení / rozvrh) a obrázkové bannery.
 
-> 🎓 **Tahle appka je doprovodný materiál ke kurzu [AI First](https://aifirst.cz).** Ukazuju v něm (mimo jiné v lekci o PPC), jak spravovat reálné Sklik kampaně z Claude Code přes vlastní nástroj. Součástí repa je i [skill pro Claude Code](#skill-pro-claude-code-sklik-ppc), který ji obaluje. Jestli tě zajímá, jak takhle stavět vlastní AI nástroje a pracovat s AI prakticky → [aifirst.cz](https://aifirst.cz).
+> 🎓 **Tahle appka je doprovodný materiál k 7. lekci kurzu [AI First](https://aifirst.cz).** V lekci ukazuju marketérům, jak využít vibe coding v každodenní práci — postavit si vlastní nástroj, který za vás dělá rutinu (tady správu Sklik kampaní z Claude Code) a šetří hodiny času. Součástí repa je i [skill pro Claude Code](#skill-pro-claude-code-sklik-ppc), který appku obaluje. Chceš se to naučit prakticky? → **[aifirst.cz](https://aifirst.cz)**
 
 ## Požadavky
 
@@ -272,20 +272,17 @@ sklik-ppc-app/
 - API **nepodporuje** filtry na nadřazené entity (`campaign.ids`, `group.ids`, `status`) v `restrictionFilter` — proto se aplikují na straně klienta.
 - Příklady použití API Drak: [github.com/seznam/sklik-api-examples](https://github.com/seznam/sklik-api-examples).
 
-## Bezpečnost
-
-- Žádné tokeny v kódu ani v gitu — výhradně přes `.env` (je v `.gitignore`).
-- Session cache (`.session_cache_*.json`) je rovněž gitignored.
-- Mazací operace vyžadují explicitní `--confirm`.
-
 ## O kurzu AI First
 
-Tenhle nástroj vznikl jako ukázka pro **[AI First](https://aifirst.cz)** — praktický videokurz AI a vibe codingu pro marketéry, podnikatele a kohokoli s chutí tvořit.
+Tahle appka vznikla jako ukázka do **7. lekce kurzu [AI First](https://aifirst.cz)** — praktického videokurzu AI a vibe codingu pro marketéry, podnikatele a kohokoli s chutí tvořit.
+
+Lekce ukazuje, jak vibe coding zapojit do **každodenní marketingové práce**: postavit si vlastní nástroje na míru, automatizovat rutinu, ušetřit hodiny času a zvednout efektivitu — bez programátora.
 
 > *„Nechte AI dělat práci, kterou musíte, ať můžete dělat práci, kterou chcete."*
 
 - 🎬 18,5 hodiny praktických videí, 10 lekcí
-- 🛠️ Učí tvořit reálné věci (jako tuhle appku), ne jen promptovat
+- 🚀 Reálná praxe — stavíš věci, které opravdu používáš (jako tenhle nástroj)
+- ⏱️ Důraz na úsporu času a efektivitu v běžné práci
 - 👉 **[aifirst.cz](https://aifirst.cz)**
 
 ## Licence
