@@ -34,7 +34,12 @@ cp .env.example .env   # a doplň token
 
 ### Získání API tokenu
 
-Token najdeš v Skliku v **Nastavení → API** (sekce *Přístup k API / tokeny*). Vyžaduje schválený přístup k API Drak.
+1. Přihlas se do Skliku a otevři **[www.sklik.cz/settings](https://www.sklik.cz/settings)**.
+2. Najdi sekci **„Přístup k API Drak"**.
+3. Vygeneruj / zkopíruj svůj **API token**.
+4. Token vlož do souboru `.env` jako `SKLIK_API_TOKEN` (viz [Konfigurace](#konfigurace) níže).
+
+> Token je heslo k tvému Sklik účtu přes API — nikam ho nedávej do kódu ani do gitu, patří **výhradně** do `.env` (které je v `.gitignore`).
 
 ### Konfigurace
 

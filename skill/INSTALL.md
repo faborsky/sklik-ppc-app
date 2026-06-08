@@ -9,6 +9,14 @@ Tahle složka obsahuje **skill pro Claude Code**, který obaluje CLI aplikaci v 
 1. **Naklonovaný tenhle repozitář** a funkční appka (`./setup.sh` proběhl, `.env` má token).
 2. Nainstalovaný **Claude Code**.
 
+### Kde vzít API token Skliku
+
+1. Přihlas se do Skliku a otevři **[www.sklik.cz/settings](https://www.sklik.cz/settings)**.
+2. Sekce **„Přístup k API Drak"** → vygeneruj / zkopíruj svůj **API token**.
+3. Token vlož do `.env` v repu appky jako `SKLIK_API_TOKEN` (detaily v hlavním `README.md`).
+
+> Token je heslo k účtu přes API — patří jen do `.env` (v `.gitignore`), nikdy do kódu ani gitu.
+
 ## Krok za krokem
 
 Předpokládejme, že sis repo naklonoval do `~/dev/sklik-ppc-app` (uprav cesty podle sebe).
@@ -57,6 +65,26 @@ Claude se tě nejdřív doptá na kontext, navrhne strukturu a **počká na tvoj
 - **create / optimize display** — obsahové a remarketingové kampaně
 
 > Skill ti dává **mechaniku** (jak věci udělat nástrojem) a **pravidla** (co Sklik povoluje, jak psát inzeráty). **Strategii průběžné optimalizace** — kdy co měnit, jaké KPI sledovat, jak reportovat — si nastav podle svých cílů a účtů. To je ta zajímavá část, kterou se učíš v kurzu. 🙂
+
+## Doplň si skill o své vlastní know-how (doporučeno!)
+
+Tenhle skill je **schválně univerzální** — záměrně neobsahuje konkrétní strategii, protože ta je u každé firmy jiná. Největší hodnotu z něj dostaneš, když si ho **přizpůsobíš sobě**. Skill je jen složka markdown souborů, takže je to snadné:
+
+1. **Přidej vlastní referenční dokument.** Do `~/.claude/skills/sklik-ppc/` si vytvoř např. `moje-strategie.md` a sepiš do něj:
+   - jak ty stavíš a optimalizuješ kampaně (tvoje postupy, prahy, kadence kontrol),
+   - cílové KPI a CPA/PNO pro tvoje produkty,
+   - tón a styl inzerátů tvojí značky, no-go fráze,
+   - vylučující slova, která se ti osvědčila,
+   - tvoji firemní strategii / segmenty / sezónnost.
+
+2. **Odkaž na něj ze `SKILL.md`.** V sekci *„Load Reference Documents"* přidej řádek, ať Claude tvůj dokument načítá:
+   ```
+   - `moje-strategie.md` — moje postupy a firemní strategie (VŽDY přečíst)
+   ```
+
+3. **Klidně si uprav i scénáře.** Můžeš si do `SKILL.md` doplnit vlastní krok pro reporting, PPC deník, schvalovací proces apod.
+
+> Čím konkrétnější kontext skillu dáš, tím lepší a „tvoje" budou návrhy. Univerzální skill = univerzální výstup; tvoje know-how = výstup na míru.
 
 ## Aktualizace skillu
 

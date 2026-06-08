@@ -132,6 +132,8 @@ These files live next to this `SKILL.md` (in the same skill folder).
 
 This skill ships the **mechanics** of campaign management — how to create campaigns and how to read performance data and adjust bids/budgets/negatives with the CLI. It does **not** prescribe an ongoing optimization methodology (when to check, target KPIs, journaling, reporting cadence). That strategy is yours to define for your own accounts and goals. The optimize scenarios below show *how* to make changes with the tool, not *what* to change — those decisions are up to you.
 
+> **Make this skill yours.** This skill is intentionally generic. For the best results, add your own reference doc (e.g. `my-strategy.md`) to this skill folder describing how *you* build and optimize campaigns, your target KPIs/CPA, brand tone, proven negatives, and company strategy — then list it in *Load Reference Documents* above so it's always read. See `INSTALL.md` for how.
+
 ---
 
 ## Scenario 1: CREATE — New Search Campaigns
