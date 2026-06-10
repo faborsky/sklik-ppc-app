@@ -2,9 +2,15 @@
 
 CLI aplikace pro správu PPC kampaní na **Seznam Sklik** přes [API Drak](https://api.sklik.cz/drak/) (JSON, verze v5).
 
-Pokrývá kompletní životní cyklus *search* i *obsahových* kampaní — kampaně, sestavy, klíčová slova, inzeráty, vylučující slova, výzkum klíčových slov, statistiky — plus měření konverzí, retargetingová publika, cílení (regiony / zařízení / rozvrh) a obrázkové bannery.
+Pokrývá kompletní životní cyklus *search* i *obsahových* kampaní — kampaně, sestavy, klíčová slova, inzeráty, vylučující slova, výzkum klíčových slov, statistiky — plus měření konverzí, retargetingová publika, cílení (regiony / zařízení / rozvrh), obrázkové bannery a kombinovanou (nativní) reklamu.
 
 > 🎓 **Tahle appka je doprovodný materiál k 7. lekci kurzu [AI First](https://aifirst.cz).** V lekci ukazuju marketérům, jak využít vibe coding v každodenní práci — postavit si vlastní nástroj, který za vás dělá rutinu (tady správu Sklik kampaní z Claude Code) a šetří hodiny času. Součástí repa je i [skill pro Claude Code](#skill-pro-claude-code-sklik-ppc), který appku obaluje. Chceš se to naučit prakticky? → **[aifirst.cz](https://aifirst.cz)**
+
+## 🆕 Co je nového
+
+**10. 6. 2026 — v1.1.0: Kombinovaná (nativní) reklama** 🎉
+
+Přibyl příkaz [`combined-create`](#kombinovaná-nativní-reklama) — vytváření **kombinované reklamy** přes API. To je formát, kterým se na obsahové síti Seznamu zobrazuje i **nativní reklama v článcích**: dodáš texty + obrázky a Sklik z nich sám skládá podobu pro nativní pozice v článcích i responzivní bannerové sloty. Výpis přes `ads` (`adType: combined`), statistiky přes `ad-stats`.
 
 ## Požadavky
 
@@ -142,6 +148,18 @@ Příkazy se spouští přes `run.sh` (sám aktivuje venv):
 
 > Změna kreativních polí inzerátu vytvoří nový inzerát (API vrací `newAdIds`).
 
+### Kombinovaná (nativní) reklama
+
+Formát pro obsahovou síť, kterým se zobrazuje i **nativní reklama v článcích** na webech Seznamu. Sklik z dodaných textů a obrázků automaticky skládá výslednou podobu (nativní pozice v článku, responzivní sloty, branding) — konkrétní umístění nevybíráš.
+
+| Příkaz | Klíčové přepínače |
+|--------|-------------------|
+| `combined-create` | `--group-id`, `--short-line` (max 25 zn.), `--long-line` (max 90), `--description` (max 90), `--company-name` (max 25), `--final-url`, `--image-landscape` (1,91:1, min 600×314 px), `--image-square` (1:1, min 300×300 px), `--image-logo`, `--image-landscape-logo`, `--color-main/--color-accent` (hex), `--mobile-final-url`, `--tracking-template`, `--status`, `--json` |
+
+Výpis přes `ads` (`adType: combined`), statistiky přes `ad-stats`, smazání přes `ad-remove`. Obrázky: lokální cesta nebo URL (jpg/png/gif, max 1 MB), CLI je zakóduje samo.
+
+> **Pozor:** Sklik z textů **tiše odstraňuje zakázané znaky** (např. pomlčku „—" z titulku) — bez chyby i bez warningu. Po vytvoření si finální znění ověř přes `ads --group-id X --json`. Úprava textů/obrázků není možná — smaž (`ad-remove`) a vytvoř znovu.
+
 ### Vylučující klíčová slova
 
 | Příkaz | Klíčové přepínače |
@@ -241,6 +259,16 @@ Statické bannery (jpg/png/gif) pro obsahovou síť. Pro HTML5 bannery použij j
 ./run.sh conversions
 ./run.sh retargeting
 ./run.sh banner-formats
+
+# Kombinovaná (nativní) reklama pro obsahovou síť
+./run.sh combined-create --group-id 789 \
+  --short-line "Kurz AI pro firmy" \
+  --long-line "Naučte se AI využívat v každodenní praxi" \
+  --description "Praktický videokurz pro marketéry a podnikatele." \
+  --company-name "Example s.r.o." \
+  --final-url "https://example.cz/kurz" \
+  --image-landscape ./obrazky/landscape_1200x628.jpg \
+  --image-square ./obrazky/square_1200x1200.jpg
 ```
 
 ## Skill pro Claude Code (`/sklik-ppc`)

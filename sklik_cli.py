@@ -19,6 +19,8 @@ from datetime import datetime, timedelta
 import requests
 from dotenv import load_dotenv
 
+__version__ = "1.1.0"
+
 # ---------------------------------------------------------------------------
 # Configuration
 # ---------------------------------------------------------------------------
@@ -979,6 +981,7 @@ def cmd_ads(args: argparse.Namespace) -> None:
 
     cols = ["id", "adType", "headline1", "headline2", "headline3",
             "description", "description2", "finalUrl", "path1", "path2",
+            "shortLine", "longLine", "companyName",
             "status", "group.id", "group.name"]
 
     data = _api_call("ads.list", [restriction, {
@@ -995,7 +998,7 @@ def cmd_ads(args: argparse.Namespace) -> None:
     if args.json:
         out = []
         for a in ads:
-            out.append({
+            item = {
                 "id": a.get("id"),
                 "adType": a.get("adType"),
                 "status": a.get("status"),
@@ -1008,7 +1011,14 @@ def cmd_ads(args: argparse.Namespace) -> None:
                 "path1": a.get("path1"),
                 "path2": a.get("path2"),
                 "groupId": a.get("group", {}).get("id") if isinstance(a.get("group"), dict) else a.get("group.id"),
-            })
+            }
+            if a.get("adType") == "combined":
+                item.update({
+                    "shortLine": a.get("shortLine"),
+                    "longLine": a.get("longLine"),
+                    "companyName": a.get("companyName"),
+                })
+            out.append(item)
         _output_json(out)
     else:
         if not ads:
@@ -1016,10 +1026,15 @@ def cmd_ads(args: argparse.Namespace) -> None:
             return
         for a in ads:
             print(f"ID: {a.get('id')}  Type: {a.get('adType')}  Status: {a.get('status')}")
-            print(f"  H1: {a.get('headline1', '')}  |  H2: {a.get('headline2', '')}  |  H3: {a.get('headline3', '')}")
-            print(f"  D1: {a.get('description', '')}")
-            print(f"  D2: {a.get('description2', '')}")
-            print(f"  URL: {a.get('finalUrl', '')}  Path: /{a.get('path1', '')}/{a.get('path2', '')}")
+            if a.get("adType") == "combined":
+                print(f"  Short: {a.get('shortLine', '')}  |  Long: {a.get('longLine', '')}")
+                print(f"  Desc: {a.get('description', '')}  |  Brand: {a.get('companyName', '')}")
+                print(f"  URL: {a.get('finalUrl', '')}")
+            else:
+                print(f"  H1: {a.get('headline1', '')}  |  H2: {a.get('headline2', '')}  |  H3: {a.get('headline3', '')}")
+                print(f"  D1: {a.get('description', '')}")
+                print(f"  D2: {a.get('description2', '')}")
+                print(f"  URL: {a.get('finalUrl', '')}  Path: /{a.get('path1', '')}/{a.get('path2', '')}")
             print()
 
 
@@ -1049,6 +1064,48 @@ def cmd_ad_create(args: argparse.Namespace) -> None:
         _output_json({"adIds": ad_ids})
     else:
         print(f"Ad created: ID {ad_ids[0] if ad_ids else '?'}")
+
+
+def cmd_combined_create(args: argparse.Namespace) -> None:
+    """Create a combined (native) ad for the display network.
+
+    Sklik composes the final look from the texts and images — including the
+    native in-article format. Landscape image (1.91:1, min 600×314) and square
+    image (1:1, min 300×300) are both required by the API.
+    """
+    ad: dict = {
+        "groupId": args.group_id,
+        "adType": "combined",
+        "shortLine": args.short_line,
+        "longLine": args.long_line,
+        "description": args.description,
+        "companyName": args.company_name,
+        "finalUrl": args.final_url,
+        "image": _load_image_b64(args.image_landscape),
+        "imageSquare": _load_image_b64(args.image_square),
+    }
+    if args.image_logo:
+        ad["imageLogo"] = _load_image_b64(args.image_logo)
+    if args.image_landscape_logo:
+        ad["imageLandscapeLogo"] = _load_image_b64(args.image_landscape_logo)
+    if args.color_main:
+        ad["colorMain"] = args.color_main.lstrip("#")
+    if args.color_accent:
+        ad["colorAccent"] = args.color_accent.lstrip("#")
+    if args.mobile_final_url:
+        ad["mobileFinalUrl"] = args.mobile_final_url
+    if args.tracking_template:
+        ad["trackingTemplate"] = args.tracking_template
+    if args.status:
+        ad["status"] = args.status
+
+    data = _api_call("ads.create", [[ad]], getattr(args, "user_id", None))
+    ad_ids = data.get("adIds", [])
+
+    if args.json:
+        _output_json({"adIds": ad_ids})
+    else:
+        print(f"Combined ad created: ID {ad_ids[0] if ad_ids else '?'}")
 
 
 def cmd_ad_update(args: argparse.Namespace) -> None:
@@ -1799,6 +1856,8 @@ def main() -> None:
     parser = argparse.ArgumentParser(
         description="Sklik DRAK CLI — manage PPC search campaigns.",
     )
+    parser.add_argument("--version", action="version",
+                        version=f"%(prog)s {__version__}")
     parser.add_argument(
         "--account",
         default=DEFAULT_ACCOUNT,
@@ -1955,6 +2014,31 @@ def main() -> None:
     p.add_argument("--final-url", required=True, help="Final URL")
     p.add_argument("--path1", help="Display path 1 (max 15 chars)")
     p.add_argument("--path2", help="Display path 2 (max 15 chars)")
+    p.add_argument("--json", **json_kwargs)
+
+    # --- combined-create ---
+    p = subparsers.add_parser(
+        "combined-create",
+        help="Create combined (native) ad for the display network")
+    p.add_argument("--group-id", type=int, required=True, help="Group ID")
+    p.add_argument("--short-line", required=True, help="Short headline (max 25 chars)")
+    p.add_argument("--long-line", required=True, help="Long headline (max 90 chars)")
+    p.add_argument("--description", required=True, help="Description (max 90 chars)")
+    p.add_argument("--company-name", dest="company_name", required=True,
+                   help="Company or brand name (max 25 chars)")
+    p.add_argument("--final-url", required=True, help="Final URL")
+    p.add_argument("--image-landscape", required=True,
+                   help="Landscape image 1.91:1, min 600x314 px (local path or URL)")
+    p.add_argument("--image-square", required=True,
+                   help="Square image 1:1, min 300x300 px (local path or URL)")
+    p.add_argument("--image-logo", help="Square logo 1:1, min 128x128 px (optional)")
+    p.add_argument("--image-landscape-logo",
+                   help="Landscape logo 4:1, min 512x128 px (optional)")
+    p.add_argument("--color-main", help="Main color in HEX (with or without #)")
+    p.add_argument("--color-accent", help="Accent color in HEX (with or without #)")
+    p.add_argument("--mobile-final-url", help="Mobile final URL")
+    p.add_argument("--tracking-template", help="Tracking template")
+    p.add_argument("--status", choices=["active", "suspend"], help="Initial status")
     p.add_argument("--json", **json_kwargs)
 
     # --- ad-update ---
@@ -2152,6 +2236,7 @@ def main() -> None:
         "keyword-stats": cmd_keyword_stats,
         "ads": cmd_ads,
         "ad-create": cmd_ad_create,
+        "combined-create": cmd_combined_create,
         "ad-update": cmd_ad_update,
         "ad-remove": cmd_ad_remove,
         "ad-stats": cmd_ad_stats,

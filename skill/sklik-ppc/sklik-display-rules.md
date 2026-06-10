@@ -18,6 +18,37 @@ Reference for managing display (content network) and remarketing campaigns with 
 - Typical daily budget: 30–150 Kč
 - Usually CPC bidding
 
+## Combined (Native) Ads — Kombinovaná reklama
+
+The display-network ad type that also serves as **native advertising inside articles** on Seznam content sites. Sklik automatically composes the rendering (native in-article, responsive banner slots, branding strips) from the supplied assets — you don't pick the placement format.
+
+### Why use it alongside banners
+- Reaches native in-article placements that fixed-size banners can never fill
+- One ad covers all responsive slots — no need for 7 sizes
+- Typically cheaper inventory than premium banner positions
+
+### API support (full, via `ads.*`)
+- `ads.create` with `adType: combined` — CLI command `combined-create`
+- Listed by `ads.list` (CLI `ads`), stats via the ads report (CLI `ad-stats`, `adType: combined`)
+- No content update — remove + create (same as ETA)
+
+### Required assets
+| Field | Limit |
+|-------|-------|
+| Short headline (`shortLine`) | max 25 chars |
+| Long headline (`longLine`) | max 90 chars |
+| Description | max 90 chars |
+| Company name | max 25 chars |
+| Landscape image | 1.91:1, min 600×314 px, recommended 1200×628, max 1 MB |
+| Square image | 1:1, min 300×300 px, recommended 1200×1200, max 1 MB |
+
+Optional: square logo (1:1, min 128×128), landscape logo (4:1, min 512×128), main/accent color (hex), mobile final URL, tracking template.
+
+### Gotchas
+- **Forbidden characters are stripped silently** — e.g. em dash "—" disappears from headlines without any warning. Always verify final texts with `ads --json` after creation.
+- Logos: either the square or the landscape logo is shown, never both; display is not guaranteed.
+- Texts must read naturally in native context (the ad looks like an article teaser) — avoid hard banner-style "CLICK NOW" copy.
+
 ## Banner API Specifics
 
 ### Namespace

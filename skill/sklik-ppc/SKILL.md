@@ -45,6 +45,7 @@ Use these exact commands:
 - **Groups**: `groups`, `group-create`, `group-update`, `group-remove`, `group-stats`
 - **Keywords**: `keywords`, `keyword-create`, `keyword-create-batch`, `keyword-update`, `keyword-remove`, `keyword-stats`
 - **Ads (ETA)**: `ads`, `ad-create`, `ad-update`, `ad-remove`, `ad-stats`
+- **Combined (native) ads**: `combined-create` — kombinovaná reklama for the display network (incl. native in-article placements). List via `ads` (`adType: combined`), stats via `ad-stats`, remove via `ad-remove`. No update — remove + create.
 - **Negatives**: `negatives`, `negative-add`, `negative-add-batch`, `negative-remove`
 - **Research**: `suggest`, `suggest-stats`, `search-queries`
 - **Sitelinks**: `sitelinks`, `sitelink-create`, `sitelink-remove`
@@ -77,6 +78,14 @@ Use these exact commands:
 - Required: `--group-id`, `--name`, `--clickthru-url`, `--image`. Optional: `--status active/suspend`.
 - **There is no banner-update / banner-replace / banner-create-batch.** To replace a banner: `banner-remove --banner-id X --confirm` then `banner-create ...`. To upload many: loop `banner-create` (sequentially).
 - Allowed formats/sizes: `banner-formats` (fixed dimensions e.g. 300×300, 728×90; ≤250 KB). Match the image to an allowed size before upload.
+
+### Combined (native) ads — kombinovaná reklama
+- **Native ads in articles ARE combined ads** — Sklik has no separate "native" format; it composes the rendering (including in-article native placements) from the supplied texts + images.
+- Create with `combined-create`. Required: `--group-id` (display/context group), `--short-line` (max 25 chars), `--long-line` (max 90), `--description` (max 90), `--company-name` (max 25), `--final-url`, `--image-landscape` (1.91:1, min 600×314, recommended 1200×628), `--image-square` (1:1, min 300×300, recommended 1200×1200). Optional: `--image-logo` (1:1, min 128×128), `--image-landscape-logo` (4:1, min 512×128), `--color-main`/`--color-accent` (hex), `--mobile-final-url`, `--tracking-template`, `--status`.
+- Images: local path OR URL (jpg/png/gif, max 1 MB each), same loading as `banner-create --image`.
+- **Sklik silently strips forbidden characters from texts** — e.g. an em dash "—" in longLine is removed without a warning. Verify the final wording with `ads --group-id X --json` after creation.
+- Like ETA: `ad-update` only changes status; to change texts/images, `ad-remove` + `combined-create`. Stats via `ad-stats` (`adType: combined`).
+- Uppercase warnings (`consecutive_two_and_more_uppercase`) apply here too — usually safe to ignore for brand abbreviations.
 
 ### HTML5 vs Image banners — IMPORTANT
 - **The Sklik `banners.*` API only manages IMAGE banners (JPG, PNG, GIF).** `banners` (list) and `banner-create`/`banner-remove` cover image banners only.
@@ -410,11 +419,19 @@ Campaign: "{project} - Remarketing" — type: context
   --clickthru-url "https://..." --image [path]/{theme}_300x250.png --json
 # repeat for each size/file
 
-# 4. Optional targeting on the campaign (device bids / regions)
+# 4. Combined (native) ad — recommended alongside banners; covers native
+#    in-article placements and responsive slots that banners can't fill
+<SKLIK_APP_DIR>/run.sh combined-create --group-id X \
+  --short-line "..." --long-line "..." --description "..." \
+  --company-name "..." --final-url "https://..." \
+  --image-landscape [path]/landscape_1200x628.jpg \
+  --image-square [path]/square_1200x1200.jpg --json
+
+# 5. Optional targeting on the campaign (device bids / regions)
 <SKLIK_APP_DIR>/run.sh campaign-update --campaign-id X --device-bids 0:-20:-20:-100 --json
 ```
 
-> Only JPG/PNG/GIF go through `banner-create`. HTML5 ZIPs must be uploaded via the Sklik web UI.
+> Only JPG/PNG/GIF go through `banner-create`. HTML5 ZIPs must be uploaded via the Sklik web UI. Combined (native) ads go through `combined-create` — see the gotchas section for field limits.
 
 Report all created IDs.
 
@@ -451,6 +468,7 @@ Top performers (keep/scale), underperformers (pause/replace), missing sizes, cre
 - Device/region bid modifiers: `campaign-update --campaign-id X --device-bids 0:-30:-30:-100`
 - Upload new banners: loop `banner-create --image ...` (one per file)
 - Replace old creatives: `banner-remove` old + `banner-create` new (see Scenario 4)
+- Combined (native) ads: pause via `ad-update --status suspend`; text/image change = `ad-remove` + `combined-create`. If a display group has only banners, suggest adding a combined ad — it unlocks native in-article placements.
 - Adjust budgets: `campaign-update`
 
 ---
