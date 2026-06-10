@@ -51,6 +51,7 @@ Use these exact commands:
 - **Sitelinks**: `sitelinks`, `sitelink-create`, `sitelink-remove`
 - **Conversions** (measurement defs): `conversions`, `conversion-types`, `conversion-create`, `conversion-update`, `conversion-remove`
 - **Retargeting** (audiences): `retargeting`, `retargeting-create`, `retargeting-update`, `retargeting-remove`
+- **Placements (umístění)**: `placements` (filter `--group-id`), `placement-create` (`--group-id`, `--pattern "forbes.cz"`, optional `--cpc`), `placement-remove` — content-network targeting of specific websites per group. Pattern = domain or URL path (`"mediar.cz"`, `"www.e15.cz/byznys"`).
 - **Image banners**: `banner-formats`, `banners` (filter `--group-id`), `banner-create` (`--image` = local path OR URL), `banner-remove`
   - No batch/replace/update/stats command. Batch = loop `banner-create`; replace = `banner-remove` old + `banner-create` new; **banner stats come from `ad-stats`** (banners appear in the ads report as `adType: banner`).
 
@@ -427,9 +428,15 @@ Campaign: "{project} - Remarketing" — type: context
   --image-landscape [path]/landscape_1200x628.jpg \
   --image-square [path]/square_1200x1200.jpg --json
 
-# 5. Optional targeting on the campaign (device bids / regions)
+# 5. Placement targeting — restrict the group to specific websites
+<SKLIK_APP_DIR>/run.sh placement-create --group-id X --pattern "example.cz" --json
+# verify: <SKLIK_APP_DIR>/run.sh placements --group-id X --json
+
+# 6. Optional targeting on the campaign (device bids / regions)
 <SKLIK_APP_DIR>/run.sh campaign-update --campaign-id X --device-bids 0:-20:-20:-100 --json
 ```
+
+> **Placement gotcha:** a freshly created display group has NO placement targeting — it serves across the whole content network until you add placements. When the plan is per-web targeting, add placements BEFORE activating the campaign.
 
 > Only JPG/PNG/GIF go through `banner-create`. HTML5 ZIPs must be uploaded via the Sklik web UI. Combined (native) ads go through `combined-create` — see the gotchas section for field limits.
 

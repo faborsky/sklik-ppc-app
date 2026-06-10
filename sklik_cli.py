@@ -19,7 +19,7 @@ from datetime import datetime, timedelta
 import requests
 from dotenv import load_dotenv
 
-__version__ = "1.1.0"
+__version__ = "1.2.0"
 
 # ---------------------------------------------------------------------------
 # Configuration
@@ -1849,6 +1849,82 @@ def cmd_banner_remove(args: argparse.Namespace) -> None:
 
 
 # ---------------------------------------------------------------------------
+# Commands — Placements (content network "umístění" = patterns.* namespace)
+# ---------------------------------------------------------------------------
+# Placement targeting of display groups lives in the patterns.* namespace:
+# a pattern is a URL string like "forbes.cz" or "www.e15.cz/byznys" attached
+# to a group. There is no patterns.list — listing goes through the report API.
+
+def cmd_placements(args: argparse.Namespace) -> None:
+    """List placement patterns (content network targeting)."""
+    date_to = datetime.now().strftime("%Y-%m-%d")
+    date_from = (datetime.now() - timedelta(days=30)).strftime("%Y-%m-%d")
+    report = _fetch_report(
+        "patterns", {}, date_from, date_to,
+        ["id", "pattern", "status", "cpc", "group.id", "group.name"],
+        user_id=getattr(args, "user_id", None))
+
+    if args.group_id:
+        report = [r for r in report
+                  if (r.get("group", {}).get("id") if isinstance(r.get("group"), dict) else r.get("group.id")) == args.group_id]
+
+    if args.json:
+        out = [{
+            "id": r.get("id"),
+            "pattern": r.get("pattern"),
+            "status": r.get("status"),
+            "cpc": _halere_to_czk(r.get("cpc")),
+            "groupId": r.get("group", {}).get("id") if isinstance(r.get("group"), dict) else r.get("group.id"),
+            "groupName": r.get("group", {}).get("name") if isinstance(r.get("group"), dict) else r.get("group.name"),
+        } for r in report]
+        _output_json(out)
+    else:
+        if not report:
+            print("No placements found.")
+            return
+        print(f"{'ID':<12} {'Pattern':<35} {'Status':<10} {'Group'}")
+        print("-" * 80)
+        for r in report:
+            g_name = r.get("group", {}).get("name", "") if isinstance(r.get("group"), dict) else r.get("group.name", "")
+            print(f"{r.get('id', ''):<12} {(r.get('pattern') or ''):<35} "
+                  f"{(r.get('status') or ''):<10} {g_name}")
+
+
+def cmd_placement_create(args: argparse.Namespace) -> None:
+    """Add a placement pattern (target website) to a display group."""
+    pattern: dict = {
+        "groupId": args.group_id,
+        "pattern": args.pattern,
+    }
+    if args.cpc is not None:
+        pattern["cpc"] = _czk_to_halere(args.cpc)
+    if args.status:
+        pattern["status"] = args.status
+
+    data = _api_call("patterns.create", [[pattern]], getattr(args, "user_id", None))
+    raw_ids = data.get("ids") or data.get("patternIds") or []
+    ids = [i.get("id") if isinstance(i, dict) else i for i in raw_ids]
+
+    if args.json:
+        _output_json({"patternIds": ids})
+    else:
+        print(f"Placement created: ID {ids[0] if ids else '?'}")
+
+
+def cmd_placement_remove(args: argparse.Namespace) -> None:
+    """Remove a placement pattern."""
+    if not args.confirm:
+        print("ERROR: Requires --confirm flag.", file=sys.stderr)
+        sys.exit(1)
+
+    _api_call("patterns.remove", [[args.pattern_id]], getattr(args, "user_id", None))
+    if args.json:
+        _output_json({"removed": True, "patternId": args.pattern_id})
+    else:
+        print(f"Placement {args.pattern_id} removed.")
+
+
+# ---------------------------------------------------------------------------
 # CLI setup
 # ---------------------------------------------------------------------------
 
@@ -2211,6 +2287,26 @@ def main() -> None:
     p.add_argument("--confirm", action="store_true", help="Required for deletion")
     p.add_argument("--json", **json_kwargs)
 
+    # --- placements ---
+    p = subparsers.add_parser("placements", help="List placement patterns (content network targeting)")
+    p.add_argument("--group-id", type=int, help="Filter by group ID")
+    p.add_argument("--json", **json_kwargs)
+
+    # --- placement-create ---
+    p = subparsers.add_parser("placement-create", help="Add placement (target website) to a display group")
+    p.add_argument("--group-id", type=int, required=True, help="Group ID")
+    p.add_argument("--pattern", required=True,
+                   help='URL pattern, e.g. "forbes.cz" or "www.e15.cz/byznys"')
+    p.add_argument("--cpc", type=float, help="Placement max CPC in CZK (default: group CPC)")
+    p.add_argument("--status", choices=["active", "suspend"], help="Initial status")
+    p.add_argument("--json", **json_kwargs)
+
+    # --- placement-remove ---
+    p = subparsers.add_parser("placement-remove", help="Remove placement pattern")
+    p.add_argument("--pattern-id", type=int, required=True, help="Pattern ID")
+    p.add_argument("--confirm", action="store_true", help="Required for deletion")
+    p.add_argument("--json", **json_kwargs)
+
     args = parser.parse_args()
     set_account(getattr(args, "account", DEFAULT_ACCOUNT))
     _check_config()
@@ -2263,6 +2359,9 @@ def main() -> None:
         "banners": cmd_banners,
         "banner-create": cmd_banner_create,
         "banner-remove": cmd_banner_remove,
+        "placements": cmd_placements,
+        "placement-create": cmd_placement_create,
+        "placement-remove": cmd_placement_remove,
     }
 
     commands[args.command](args)

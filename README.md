@@ -8,6 +8,10 @@ Pokrývá kompletní životní cyklus *search* i *obsahových* kampaní — kamp
 
 ## 🆕 Co je nového
 
+**10. 6. 2026 — v1.2.0: Cílení na umístění (placementy)** 🎯
+
+Přibyly příkazy [`placements`, `placement-create`, `placement-remove`](#umístění-cílení-na-konkrétní-weby) — cílení obsahových sestav na konkrétní weby přes API (`patterns.*` namespace). Vzor je doména nebo cesta (`"forbes.cz"`, `"www.e15.cz/byznys"`), volitelně s vlastním CPC. Pozor: nová obsahová sestava bez umístění běží po **celé** obsahové síti — placementy přidávejte před aktivací kampaně.
+
 **10. 6. 2026 — v1.1.0: Kombinovaná (nativní) reklama** 🎉
 
 Přibyl příkaz [`combined-create`](#kombinovaná-nativní-reklama) — vytváření **kombinované reklamy** přes API. To je formát, kterým se na obsahové síti Seznamu zobrazuje i **nativní reklama v článcích**: dodáš texty + obrázky a Sklik z nich sám skládá podobu pro nativní pozice v článcích i responzivní bannerové sloty. Výpis přes `ads` (`adType: combined`), statistiky přes `ad-stats`.
@@ -225,6 +229,18 @@ Statické bannery (jpg/png/gif) pro obsahovou síť. Pro HTML5 bannery použij j
 | `banner-remove` | `--banner-id`, `--confirm`, `--json` |
 
 > `--image` přijme lokální soubor i veřejnou URL — CLI obrázek načte a pošle do Skliku zakódovaný (base64). Drž se povolených formátů z `banner-formats` (pevné rozměry, ≤ 250 KB).
+
+### Umístění (cílení na konkrétní weby)
+
+Cílení obsahových sestav na konkrétní weby (v Skliku „umístění"). Vzor je doména nebo cesta — `"mediar.cz"`, `"www.e15.cz/byznys"`.
+
+| Příkaz | Klíčové přepínače |
+|--------|-------------------|
+| `placements` | `--group-id`, `--json` |
+| `placement-create` | `--group-id`, `--pattern "forbes.cz"`, `--cpc` (CZK, volitelně přebije CPC sestavy), `--status`, `--json` |
+| `placement-remove` | `--pattern-id`, `--confirm`, `--json` |
+
+> **Pozor:** Nová obsahová sestava bez umístění běží po **celé** obsahové síti. Když chcete cílit na konkrétní weby, přidejte umístění **před aktivací** kampaně. Vylučující umístění (`patterns.negative.*`) zatím CLI neobaluje.
 
 ## Příklady
 

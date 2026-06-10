@@ -18,6 +18,17 @@ Reference for managing display (content network) and remarketing campaigns with 
 - Typical daily budget: 30–150 Kč
 - Usually CPC bidding
 
+## Placement Targeting (Umístění) — patterns.* API
+
+Targeting specific websites in the content network is FULLY supported via API (the `patterns.*` namespace; CLI: `placements`, `placement-create`, `placement-remove`).
+
+- A placement pattern is a URL string attached to a **group**: `"forbes.cz"`, `"mediar.cz"`, or with a path `"www.e15.cz/byznys"` (section-level targeting).
+- Optional per-placement `--cpc` overrides the group CPC.
+- There is no `patterns.list` — the CLI lists placements via the report API (`patterns.createReport`/`readReport`).
+- Negative placements (excluded sites) exist in the API (`patterns.negative.*`) but are not wrapped in the CLI yet.
+- **A new display group has NO placements = serves network-wide.** Add placements before activating when per-web targeting is intended.
+- One campaign per web (with its own `--day-budget`) is the cleanest structure when each placement needs its own budget.
+
 ## Combined (Native) Ads — Kombinovaná reklama
 
 The display-network ad type that also serves as **native advertising inside articles** on Seznam content sites. Sklik automatically composes the rendering (native in-article, responsive banner slots, branding strips) from the supplied assets — you don't pick the placement format.

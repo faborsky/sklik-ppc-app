@@ -85,6 +85,14 @@ The `suggest` and `suggest-stats` commands don't support `--user-id` (but do acc
 | `ad-remove` | `--ad-id`, `--confirm`, `--json` |
 | `ad-stats` | `--group-id`, `--date-from`, `--date-to`, `--json` |
 
+### Placements (content network "umístění")
+Placement targeting of display groups = `patterns.*` namespace. Pattern is a URL string on a group: `"forbes.cz"`, `"www.e15.cz/byznys"`. No `patterns.list` — listing via report API. A group without placements serves network-wide.
+| Command | Key Flags |
+|---------|-----------|
+| `placements` | `--group-id`, `--json` |
+| `placement-create` | `--group-id`, `--pattern`, `--cpc` (CZK, optional override), `--status`, `--json` |
+| `placement-remove` | `--pattern-id`, `--confirm`, `--json` |
+
 ### Combined (native) ads — kombinovaná reklama
 The display-network format that also serves native in-article placements on Seznam content sites. Listed by `ads` (`adType: combined`), stats via `ad-stats`, removal via `ad-remove`. No content update — remove + create.
 | Command | Key Flags |
@@ -180,6 +188,7 @@ Or simple array: `["zdarma", "free", "zadarmo"]` (defaults to negativeBroad).
 - **Retargeting**: list objects use `listId` (not `id`); create/update nest editable fields under `attributes` (`name`, `membership`, `useHistoricData`, `takeAllUsers`, `description`). `retargeting.lists.list` takes only the user struct.
 - **Banners**: `banners.create` takes the image bytes directly in `file` (base64 over JSON) — NOT an image-id; CLI base64-encodes a local path or downloads a URL. Required fields: `groupId`, `name`, `clickthruUrl`, `file`. List/return quirks: list columns use `bannerName`/`adStatus` (not `name`/`status`); `banners.create` returns `bannerIds` as `[{"id":…,"requestId":…}]` (CLI normalises to ints). Allowed formats via `images.constraints.list` (fixed sizes, ≤250 KB). The separate `images.*` namespace (URL + metadata, Sklik downloads) is NOT used.
 - **Combined (native) ads**: created via `ads.create` with `adType: combined`. Both `image` (landscape 1.91:1) and `imageSquare` (1:1) are REQUIRED; binary data is base64-encoded inline (same as banners), or pass `imageId`/`imageSquareId` referencing the `images.*` namespace (CLI uses inline data only). Optional `imageLogo` (1:1) / `imageLandscapeLogo` (4:1) — Sklik shows at most one logo, display not guaranteed. Colors (`colorMain`, `colorAccent`) are hex WITHOUT the leading `#` (CLI strips it). **Sklik silently strips forbidden characters from texts** (e.g. em dash "—" in `longLine`) — no warning, no error; verify final wording via `ads.list`. Combined fields (`shortLine`, `longLine`, `companyName`) are valid `ads.list` displayColumns and come back `null` for other ad types.
+- **Placements (patterns)**: `patterns.create` takes `[{groupId, pattern, cpc?, cpt?, status?}]`; returns `ids`. `pattern` = plain domain or URL path string (no wildcards needed: `"forbes.cz"`, `"www.e15.cz/byznys"`). There is NO `patterns.list` (404) — list via `patterns.createReport` + `readReport` with displayColumns `["id","pattern","status","cpc","group.id","group.name"]`. Negative placements = `patterns.negative.*` (not wrapped in CLI).
 - **Rate limits & item caps**: not fixed in the docs — they're account-specific and queryable at runtime via the `api.limits` method, which returns `minuteRequestLimit`, `dayRequestLimit`, `statsDataLimit`, and `batchCallLimits[]` (per-method `{name, limit}` = max items per batch call), plus value ranges (`CpcMin/Max`, `CpmMin/Max`, `dayBudgetMin/Max` in haléře), `bannerSizeKBMax`, `retargetingMembershipDurationMax`, and `valueAddedTax`. The CLI does not expose `api.limits` as a command.
 - **Throttling status `429`** ("Too many requests. Has to wait."): handled in `_api_call` — CLI prints a notice, sleeps 5 s, and retries the same call. Keep large batch runs modest to avoid tripping the per-minute/per-day limits.
 - **Overflow status `413`** ("Too many items requested."): returned when a batch call exceeds that method's `batchCallLimits` entry. NOT specially handled — surfaces as a generic error and exits; there is no client-side chunking, so split large `keyword-create-batch` / `negative-add-batch` payloads yourself.
