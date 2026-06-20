@@ -42,6 +42,13 @@ The `suggest` and `suggest-stats` commands don't support `--user-id` (but do acc
 |---------|-------------|
 | `account` | Account info, wallet balance, managed accounts |
 
+### Pulse
+| Command | Key Flags |
+|---------|-----------|
+| `pulse` | `--days N` (default 7), `--date-from`/`--date-to`, `--no-compare`, `--json` |
+
+Account-wide digest in ONE call: per-campaign report for the window + previous equal-length window, aggregated to totals + per-campaign deltas + top movers. Built on `_fetch_report("campaigns", …)` (granularity `total`); two report calls (one if `--no-compare`). Purpose: token-cheap analytics pull — emits a small pre-aggregated summary instead of raw rows, so callers don't chain `account` + `campaigns` + `campaign-stats`.
+
 ### Campaigns
 | Command | Key Flags |
 |---------|-----------|

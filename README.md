@@ -8,6 +8,10 @@ Pokrývá kompletní životní cyklus *search* i *obsahových* kampaní — kamp
 
 ## 🆕 Co je nového
 
+**20. 6. 2026 — v1.3.0: `pulse` — přehled účtu jedním voláním** ⚡
+
+Přibyl příkaz [`pulse`](#pulse) — **account-wide souhrn jedním voláním**: totály, per-kampaň statistiky, delty vůči předchozímu stejně dlouhému období a top movery, vše předpočítané do kompaktního digestu (~400 tokenů). Nahrazuje řetězení `account` + `campaigns` + `campaign-stats`, takže analytický pull (i přes Claude Code) je výrazně levnější na tokeny a rychlejší. `--days N` (default 7), `--date-from/--date-to`, `--no-compare`, `--json`. Do granulárních `*-stats` se jde až na to, co `pulse` vypíchne.
+
 **10. 6. 2026 — v1.2.0: Cílení na umístění (placementy)** 🎯
 
 Přibyly příkazy [`placements`, `placement-create`, `placement-remove`](#umístění-cílení-na-konkrétní-weby) — cílení obsahových sestav na konkrétní weby přes API (`patterns.*` namespace). Vzor je doména nebo cesta (`"forbes.cz"`, `"www.e15.cz/byznys"`), volitelně s vlastním CPC. Pozor: nová obsahová sestava bez umístění běží po **celé** obsahové síti — placementy přidávejte před aktivací kampaně.
@@ -99,6 +103,21 @@ Příkazy se spouští přes `run.sh` (sám aktivuje venv):
 | Příkaz | Popis |
 |--------|-------|
 | `account` | Info o účtu, zůstatek peněženky, spravované účty |
+
+### Pulse
+
+Souhrn celého účtu **jedním voláním** — místo řetězení `account` + `campaigns` + `campaign-stats`. Vrátí totály, statistiky po kampaních, delty vůči předchozímu stejně dlouhému období a top movery, předpočítané do kompaktního digestu (ideální pro levný/rychlý analytický pull).
+
+| Příkaz | Klíčové přepínače |
+|--------|-------------------|
+| `pulse` | `--days N` (default 7), `--date-from`/`--date-to` (přebijí `--days`), `--no-compare` (vynechá delty, o 1 API volání míň), `--json` |
+
+```bash
+./run.sh pulse                 # posledních 7 dní vs předchozích 7
+./run.sh pulse --days 30       # posledních 30 dní vs předchozích 30
+./run.sh pulse --no-compare    # bez srovnání s předchozím obdobím
+./run.sh pulse --json          # strukturovaný výstup pro další zpracování
+```
 
 ### Kampaně
 

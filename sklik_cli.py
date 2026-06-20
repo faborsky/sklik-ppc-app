@@ -617,6 +617,189 @@ def cmd_campaign_stats(args: argparse.Namespace) -> None:
                       f"Conv: {s.get('conversions', 0)}")
 
 
+def _first_stats(row: dict) -> dict:
+    """Return the single 'total'-granularity stats dict from a report row."""
+    stats = row.get("stats") or []
+    return stats[0] if stats else {}
+
+
+def _pct_delta(cur: float, prev: float | None) -> str:
+    """Human-readable percent change of cur vs a previous value."""
+    if prev is None or prev == 0:
+        return "new" if cur else "—"
+    pct = (cur - prev) / prev * 100
+    arrow = "↑" if pct > 0 else ("↓" if pct < 0 else "→")
+    return f"{arrow}{abs(pct):.0f}%"
+
+
+def cmd_pulse(args: argparse.Namespace) -> None:
+    """Account-wide PPC pulse — ONE compact digest instead of many calls.
+
+    Fetches campaign-level stats for the window (and, unless --no-compare, the
+    previous equal-length window), pre-computes totals + per-campaign deltas +
+    top movers, and prints a small digest. The point is token economy: a caller
+    (e.g. an analytics agent) gets an aggregated summary instead of dumping raw
+    rows from account + campaigns + campaign-stats into its context.
+    """
+    if bool(args.date_from) != bool(args.date_to):
+        print("ERROR: --date-from a --date-to musí být zadané spolu.", file=sys.stderr)
+        sys.exit(1)
+
+    today = datetime.now()
+    if args.date_from and args.date_to:
+        date_from, date_to = args.date_from, args.date_to
+        d_from = datetime.strptime(date_from, "%Y-%m-%d")
+        d_to = datetime.strptime(date_to, "%Y-%m-%d")
+        window = (d_to - d_from).days + 1
+    else:
+        window = args.days
+        d_to = today
+        d_from = today - timedelta(days=window - 1)
+        date_from = d_from.strftime("%Y-%m-%d")
+        date_to = d_to.strftime("%Y-%m-%d")
+
+    user_id = getattr(args, "user_id", None)
+    cols = ["id", "name"] + STAT_COLUMNS
+    cur_report = _fetch_report("campaigns", {}, date_from, date_to, cols, user_id=user_id)
+
+    compare = not args.no_compare
+    prev_map: dict = {}
+    prev_from = prev_to = None
+    if compare:
+        prev_to_dt = d_from - timedelta(days=1)
+        prev_from_dt = prev_to_dt - timedelta(days=window - 1)
+        prev_from = prev_from_dt.strftime("%Y-%m-%d")
+        prev_to = prev_to_dt.strftime("%Y-%m-%d")
+        prev_report = _fetch_report("campaigns", {}, prev_from, prev_to, cols, user_id=user_id)
+        prev_map = {r.get("id"): _first_stats(r) for r in prev_report}
+
+    # Per-campaign rows (money stays in haléře until display); accumulate totals.
+    rows = []
+    tot = {"clicks": 0, "impressions": 0, "totalMoney": 0, "conversions": 0.0, "conversionValue": 0}
+    for r in cur_report:
+        s = _first_stats(r)
+        cid = r.get("id")
+        clicks = s.get("clicks", 0) or 0
+        impr = s.get("impressions", 0) or 0
+        cost = s.get("totalMoney", 0) or 0
+        conv = s.get("conversions", 0) or 0
+        val = s.get("conversionValue", 0) or 0
+        p = prev_map.get(cid, {})
+        rows.append({
+            "id": cid,
+            "name": r.get("name", "?"),
+            "clicks": clicks,
+            "impressions": impr,
+            "ctr": (clicks / impr * 100) if impr else 0.0,
+            "avgCpc_czk": (cost / clicks / 100) if clicks else 0.0,
+            "cost_czk": cost / 100,
+            "conversions": conv,
+            "convValue_czk": val / 100,
+            "pno": (cost / val * 100) if val else None,
+            "d_cost": _pct_delta(cost, p.get("totalMoney")) if compare else None,
+            "d_clicks": _pct_delta(clicks, p.get("clicks")) if compare else None,
+            "d_conv": _pct_delta(conv, p.get("conversions")) if compare else None,
+            "_cost": cost, "_prev_cost": p.get("totalMoney") or 0,
+            "_conv": conv, "_prev_conv": p.get("conversions") or 0,
+        })
+        tot["clicks"] += clicks
+        tot["impressions"] += impr
+        tot["totalMoney"] += cost
+        tot["conversions"] += conv
+        tot["conversionValue"] += val
+
+    ptot = {"clicks": 0, "impressions": 0, "totalMoney": 0, "conversions": 0.0, "conversionValue": 0}
+    for s in prev_map.values():
+        ptot["clicks"] += s.get("clicks", 0) or 0
+        ptot["impressions"] += s.get("impressions", 0) or 0
+        ptot["totalMoney"] += s.get("totalMoney", 0) or 0
+        ptot["conversions"] += s.get("conversions", 0) or 0
+        ptot["conversionValue"] += s.get("conversionValue", 0) or 0
+
+    active = sorted((r for r in rows if r["impressions"] > 0), key=lambda r: r["_cost"], reverse=True)
+    hidden = len(rows) - len(active)
+
+    totals = {
+        "cost_czk": tot["totalMoney"] / 100,
+        "clicks": tot["clicks"],
+        "impressions": tot["impressions"],
+        "ctr": (tot["clicks"] / tot["impressions"] * 100) if tot["impressions"] else 0.0,
+        "avgCpc_czk": (tot["totalMoney"] / tot["clicks"] / 100) if tot["clicks"] else 0.0,
+        "conversions": tot["conversions"],
+        "convValue_czk": tot["conversionValue"] / 100,
+        "pno": (tot["totalMoney"] / tot["conversionValue"] * 100) if tot["conversionValue"] else None,
+    }
+    if compare:
+        totals["d_cost"] = _pct_delta(tot["totalMoney"], ptot["totalMoney"])
+        totals["d_clicks"] = _pct_delta(tot["clicks"], ptot["clicks"])
+        totals["d_impr"] = _pct_delta(tot["impressions"], ptot["impressions"])
+        totals["d_conv"] = _pct_delta(tot["conversions"], ptot["conversions"])
+
+    # Movers: biggest absolute cost & conversion swings vs previous period.
+    movers = []
+    if compare:
+        for r in sorted(active, key=lambda r: abs(r["_cost"] - r["_prev_cost"]), reverse=True)[:3]:
+            if r["_cost"] != r["_prev_cost"]:
+                movers.append(f"{r['name']}: cost {r['d_cost']}")
+        for r in sorted(active, key=lambda r: abs(r["_conv"] - r["_prev_conv"]), reverse=True)[:2]:
+            if r["_conv"] != r["_prev_conv"]:
+                movers.append(f"{r['name']}: conv {r['d_conv']}")
+
+    if args.json:
+        _output_json({
+            "account": args.account,
+            "period": {"from": date_from, "to": date_to, "days": window},
+            "comparePeriod": ({"from": prev_from, "to": prev_to} if compare else None),
+            "totals": totals,
+            "campaigns": [{k: v for k, v in r.items() if not k.startswith("_")} for r in active],
+            "hiddenZeroImpressionCampaigns": hidden,
+            "movers": movers,
+        })
+        return
+
+    # --- compact text digest ---
+    print(f"Sklik pulse — {args.account}  ({date_from} → {date_to}, {window}d)")
+    if compare:
+        print(f"vs předchozích {window} dní ({prev_from} → {prev_to})")
+    print()
+
+    def dd(key: str) -> str:
+        return f" ({totals[key]})" if compare else ""
+
+    pno_str = f"{totals['pno']:.0f}%" if totals["pno"] is not None else "—"
+    print(
+        f"TOTAL  cost {totals['cost_czk']:.0f} Kč{dd('d_cost')}  "
+        f"clicks {totals['clicks']}{dd('d_clicks')}  "
+        f"impr {totals['impressions']}{dd('d_impr')}  "
+        f"CTR {totals['ctr']:.2f}%  CPC {totals['avgCpc_czk']:.2f} Kč  "
+        f"conv {totals['conversions']:.0f}{dd('d_conv')}  "
+        f"val {totals['convValue_czk']:.0f} Kč  PNO {pno_str}"
+    )
+    print()
+
+    if not active:
+        print("Žádná kampaň se zobrazeními v období.")
+        return
+
+    print("Kampaně (aktivní v období, dle nákladů):")
+    for r in active:
+        name = r["name"][:30]
+        pno_c = f"{r['pno']:.0f}%" if r["pno"] is not None else "—"
+        dcost = r["d_cost"] if compare else ""
+        dconv = r["d_conv"] if compare else ""
+        print(
+            f"  {name:<30} {r['cost_czk']:>6.0f} Kč {dcost:<6} "
+            f"clk {r['clicks']:>4} CTR {r['ctr']:>5.2f}% "
+            f"conv {r['conversions']:>3.0f} {dconv:<6} PNO {pno_c}"
+        )
+    if hidden:
+        print(f"  (+{hidden} kampaní bez zobrazení skryto)")
+
+    if movers:
+        print()
+        print("Hlavní pohyby: " + "; ".join(movers))
+
+
 def cmd_campaign_targeting(args: argparse.Namespace) -> None:
     """Show geo / device / schedule targeting for a campaign."""
     cols = ["id", "name", "regions.id", "regions.name",
@@ -1950,6 +2133,18 @@ def main() -> None:
     p = subparsers.add_parser("account", help="Account info")
     p.add_argument("--json", **json_kwargs)
 
+    # --- pulse (account-wide compact digest) ---
+    p = subparsers.add_parser(
+        "pulse",
+        help="Account-wide PPC pulse: one compact digest (totals + per-campaign + deltas)",
+    )
+    p.add_argument("--days", type=int, default=7, help="Window length in days (default 7)")
+    p.add_argument("--date-from", help="Start date YYYY-MM-DD (use with --date-to; overrides --days)")
+    p.add_argument("--date-to", help="End date YYYY-MM-DD (use with --date-from; overrides --days)")
+    p.add_argument("--no-compare", action="store_true",
+                   help="Skip vs-previous-period deltas (one fewer API call)")
+    p.add_argument("--json", **json_kwargs)
+
     # --- campaigns ---
     p = subparsers.add_parser("campaigns", help="List campaigns")
     p.add_argument("--status", choices=["active", "suspend"], help="Filter by status")
@@ -2313,6 +2508,7 @@ def main() -> None:
 
     commands = {
         "account": cmd_account,
+        "pulse": cmd_pulse,
         "campaigns": cmd_campaigns,
         "campaign-create": cmd_campaign_create,
         "campaign-update": cmd_campaign_update,

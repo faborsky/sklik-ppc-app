@@ -40,6 +40,7 @@ The app reads tokens from environment variables in the app's `.env` file. You do
 Use these exact commands:
 
 - **Account**: `account`
+- **Pulse**: `pulse` — **account-wide overview in ONE call** (totals + per-campaign + deltas vs the previous equal-length period + top movers). Flags: `--days N` (default 7), `--date-from`/`--date-to`, `--no-compare`, `--json`. **Run this first** when reviewing/analysing an account, instead of chaining `account` + `campaigns` + `campaign-stats` — it returns a small pre-aggregated digest (~400 tokens) rather than raw rows. Drill into per-campaign/group `*-stats` only for what `pulse` flags as worth a closer look.
 - **Campaigns**: `campaigns`, `campaign-create`, `campaign-update`, `campaign-remove`, `campaign-stats`, `campaign-targeting`
   - Targeting flags on create/update: `--regions` (CSV region IDs), `--device-bids desktop:mobile:tablet:other` (%), `--schedule-json` (update only)
 - **Groups**: `groups`, `group-create`, `group-update`, `group-remove`, `group-stats`
@@ -245,17 +246,18 @@ Report all created IDs to the user.
 
 ### Phase 0 — Current state
 
+Start with `pulse` for the whole-account picture in a single call (totals, per-campaign, deltas, movers) — it tells you *which* campaigns deserve a closer look:
+
 ```bash
-<SKLIK_APP_DIR>/run.sh campaigns --json
+<SKLIK_APP_DIR>/run.sh pulse --days 30          # or --json for structured output
 <SKLIK_APP_DIR>/run.sh groups --campaign-id X --json
 ```
 
 ### Phase 1 — Pull data
 
-Pull data for the analysis period (default: last 30 days):
+`pulse` already gives you campaign-level numbers + deltas. Drill into the granular `*-stats` only for the campaigns/groups `pulse` flags as worth it (don't pull every command for every campaign):
 
 ```bash
-<SKLIK_APP_DIR>/run.sh campaign-stats --campaign-id X --json
 <SKLIK_APP_DIR>/run.sh group-stats --campaign-id X --json
 <SKLIK_APP_DIR>/run.sh keyword-stats --campaign-id X --json
 <SKLIK_APP_DIR>/run.sh ad-stats --group-id X --json
