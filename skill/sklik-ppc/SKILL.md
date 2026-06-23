@@ -39,7 +39,7 @@ The app reads tokens from environment variables in the app's `.env` file. You do
 
 Use these exact commands:
 
-- **Account**: `account`
+- **Account**: `account`, `api-limits` (rate/batch/value limits + live local request-budget usage)
 - **Pulse**: `pulse` — **account-wide overview in ONE call** (totals + per-campaign + deltas vs the previous equal-length period + top movers). Flags: `--days N` (default 7), `--date-from`/`--date-to`, `--no-compare`, `--json`. **Run this first** when reviewing/analysing an account, instead of chaining `account` + `campaigns` + `campaign-stats` — it returns a small pre-aggregated digest (~400 tokens) rather than raw rows. Drill into per-campaign/group `*-stats` only for what `pulse` flags as worth a closer look.
 - **Campaigns**: `campaigns`, `campaign-create`, `campaign-update`, `campaign-remove`, `campaign-stats`, `campaign-targeting`
   - Targeting flags on create/update: `--regions` (CSV region IDs), `--device-bids desktop:mobile:tablet:other` (%), `--schedule-json` (update only)
@@ -63,6 +63,20 @@ Use these exact commands:
 3. **Never auto-create campaigns** — always present the plan first, wait for approval
 4. **Never modify running campaigns** without showing the proposed changes first
 5. **Always use `--json` flag** when parsing output programmatically
+
+## Rate limits & account safety — DON'T get the account blocked
+
+Sklik enforces a **per-account request budget** and rejects excess traffic with status `429`. Repeatedly hammering the API over the limits can get an account **throttled or, in the worst case, blocked** — a real risk on high-spend client accounts. Respect the budget:
+
+- **Limits are account-specific and not published** — read them at runtime: `<SKLIK_APP_DIR>/run.sh api-limits [--account X]`. It shows `minuteRequestLimit`, `dayRequestLimit`, `statsDataLimit`, per-method batch caps (`batchCallLimits`), value ranges, AND the live local usage (requests in the last 60 s / 24 h).
+- **The CLI already protects you.** Every call is counted in a per-account local file (`.rate_limit_<account>.json`) that persists **across sessions and parallel runs**, and is checked *before* each request: at 90 % of the minute limit it waits out the rolling 60 s window; at the daily limit it **refuses and exits** rather than hammering on. You don't manage the counter — but **don't try to defeat it** (no parallel fan-out of hundreds of write calls, no tight retry loops).
+- **Work in modest, sequential batches.** Use the `*-batch` commands instead of looping single creates, but keep each batch within the method's `batchCallLimits` (typically **≤100 items** for create/update/remove; list/report allow up to **5000**). Over the cap you get status `413` — split the payload yourself; there is no auto-chunking. Run batches one after another, not in parallel.
+- **Reports return ≤5000 rows** (`statsDataLimit`). For bigger pulls, narrow the date range or paginate — don't request everything at once.
+- **Prefer cheap reads.** Use `pulse` for account overviews (one pre-aggregated call) instead of chaining `account` + `campaigns` + many `*-stats`. Validation (`*.check`) is cheaper than data-changing calls.
+- **Batch writes are all-or-nothing** — if any item in a batch fails, Sklik rolls back the whole batch. Fix the offending item and resend.
+- **Don't overfill the account** (Sklik's recommended caps — exceeding them slows the account and can break bulk ops/imports/API): ≤250 campaigns, ≤250k keywords, ≤4000 negatives/group, ≤100 ads/group, ≤1000 groups/campaign, ≤1000 targeting entries/group.
+
+> If you ever see `429` or `413` in output, **stop and tell the user** — do not retry in a loop. The CLI caps its own retries (3×, backing off) and then aborts on purpose.
 
 ## Sklik API Gotchas
 

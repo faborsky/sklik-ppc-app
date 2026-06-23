@@ -8,6 +8,14 @@ Pokrývá kompletní životní cyklus *search* i *obsahových* kampaní — kamp
 
 ## 🆕 Co je nového
 
+**23. 6. 2026 — v1.4.0: Respektování API limitů — ochrana účtu** 🛡️
+
+Aby se předešlo riziku **throttlingu nebo zablokování účtu** kvůli překračování limitů API (reálné riziko zvlášť u klientských účtů s vysokými spendy), appka teď API limity **aktivně hlídá**:
+
+- Nový příkaz [`api-limits`](#api-limits) zjistí reálné per-account limity za běhu (`minuteRequestLimit`, `dayRequestLimit`, `statsDataLimit`, batch capy) a ukáže i živé lokální využití (requesty za posledních 60 s / 24 h).
+- **Lokální request-budget napříč session.** Každé volání se počítá do per-account souboru `.rate_limit_<account>.json`, který přežívá restart i paralelní běhy, a kontroluje se *před* každým requestem: na 90 % minutového limitu počká do uvolnění okna, na denním limitu operaci **odmítne** (místo nekonečného mlácení do API). Limity se berou z `api.limits` (cache ~1×/den), ne natvrdo.
+- `429` retry je nově **capovaný** (3× s back-offem, pak skončí); `413` (přetečení dávky) a doporučené limity počtu entit jsou zdokumentované ve skillu.
+
 **20. 6. 2026 — v1.3.0: `pulse` — přehled účtu jedním voláním** ⚡
 
 Přibyl příkaz [`pulse`](#pulse) — **account-wide souhrn jedním voláním**: totály, per-kampaň statistiky, delty vůči předchozímu stejně dlouhému období a top movery, vše předpočítané do kompaktního digestu (~400 tokenů). Nahrazuje řetězení `account` + `campaigns` + `campaign-stats`, takže analytický pull (i přes Claude Code) je výrazně levnější na tokeny a rychlejší. `--days N` (default 7), `--date-from/--date-to`, `--no-compare`, `--json`. Do granulárních `*-stats` se jde až na to, co `pulse` vypíchne.
@@ -103,6 +111,14 @@ Příkazy se spouští přes `run.sh` (sám aktivuje venv):
 | Příkaz | Popis |
 |--------|-------|
 | `account` | Info o účtu, zůstatek peněženky, spravované účty |
+| `api-limits` | Reálné API limity účtu (rate/batch/hodnotové rozsahy) + živé lokální využití request-budgetu; `--json` |
+
+```bash
+./run.sh api-limits            # limity + kolik requestů jsi spotřeboval (60 s / 24 h)
+./run.sh api-limits --json     # strukturovaný výstup
+```
+
+> **Ochrana účtu před zablokováním.** Appka počítá každé volání do per-account souboru `.rate_limit_<account>.json` (přežívá napříč session i paralelními běhy) a kontroluje ho *před* každým requestem: na 90 % minutového limitu počká, na denním limitu operaci odmítne. Limity bere z `api.limits` (cache ~1×/den). Counter neřešíš ručně — appka to hlídá za tebe.
 
 ### Pulse
 

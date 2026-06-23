@@ -4,4 +4,5 @@ __pycache__/
 *.pyc
 .session_cache.json
 .session_cache_*.json
+.rate_limit_*.json
 .DS_Store

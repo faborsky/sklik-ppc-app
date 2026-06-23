@@ -19,7 +19,7 @@ from datetime import datetime, timedelta
 import requests
 from dotenv import load_dotenv
 
-__version__ = "1.2.0"
+__version__ = "1.4.0"
 
 # ---------------------------------------------------------------------------
 # Configuration
@@ -151,22 +151,169 @@ def _get_session() -> str:
 
 
 # ---------------------------------------------------------------------------
+# Rate limiting — local, cross-session request budget per account
+# ---------------------------------------------------------------------------
+# Sklik enforces a per-account minuteRequestLimit / dayRequestLimit (queryable
+# at runtime via the api.limits method — the numbers are NOT published and are
+# account-specific). Exceeding them returns status 429 and, if abused, can get
+# an account throttled or blocked. To respect the budget even across separate
+# CLI runs and parallel sessions, we keep a rolling log of our own request
+# timestamps in a per-account file (sibling to the session cache) and check it
+# BEFORE every call — proactively, not just reactively after a 429.
+#
+# Behaviour: minute ceiling -> wait out the rolling 60s window, then proceed;
+# day ceiling -> refuse the call (never loop), so a runaway job can't keep
+# hammering an account that is already at its daily limit.
+
+RATE_LIMIT_SAFETY = 0.9        # use at most 90% of the account's stated limits
+RATE_LIMIT_REFRESH = 86400     # re-fetch api.limits at most once a day (seconds)
+RATE_LIMIT_MAX_WAIT = 180      # max seconds to wait out a full minute window
+# Conservative fallbacks if api.limits can't be fetched (real values are usually
+# higher — better to throttle a little early than risk a block).
+RATE_LIMIT_FALLBACK_MINUTE = 250
+RATE_LIMIT_FALLBACK_DAY = 100000
+
+
+def _rate_limit_path() -> str:
+    """Per-account rolling request-budget file (not shared across logins)."""
+    return os.path.join(BASE_DIR, f".rate_limit_{ACTIVE_ACCOUNT}.json")
+
+
+def _load_rate_state() -> dict:
+    path = _rate_limit_path()
+    if os.path.exists(path):
+        try:
+            with open(path) as f:
+                return json.load(f)
+        except (json.JSONDecodeError, OSError):
+            pass
+    return {"requests": [], "limits": None, "limits_fetched": 0}
+
+
+def _save_rate_state(state: dict) -> None:
+    try:
+        with open(_rate_limit_path(), "w") as f:
+            json.dump(state, f)
+    except OSError:
+        pass  # bookkeeping must never break a real operation
+
+
+def _ensure_limits(user_id: int | None) -> dict:
+    """Return cached {minute, day} request limits, refreshing via api.limits
+    at most once a day. Falls back to conservative defaults if unavailable."""
+    state = _load_rate_state()
+    cached = state.get("limits")
+    if cached and (time.time() - state.get("limits_fetched", 0)) < RATE_LIMIT_REFRESH:
+        return cached
+
+    minute, day = RATE_LIMIT_FALLBACK_MINUTE, RATE_LIMIT_FALLBACK_DAY
+    try:
+        # _throttle=False: avoids recursing back into the throttle (this call is
+        # itself counted by _record_request, just not pre-checked).
+        data = _api_call("api.limits", user_id=user_id, _throttle=False)
+        lim = data.get("limits", {}) or {}
+        minute = int(lim.get("minuteRequestLimit") or minute)
+        day = int(lim.get("dayRequestLimit") or day)
+    except SystemExit:
+        pass  # transient api.limits failure — keep fallbacks, retry next day
+
+    result = {"minute": minute, "day": day}
+    # Re-load: the api.limits call above just recorded a request timestamp.
+    state = _load_rate_state()
+    state["limits"] = result
+    state["limits_fetched"] = time.time()
+    _save_rate_state(state)
+    return result
+
+
+def _throttle_request(user_id: int | None) -> None:
+    """Enforce the local per-account request budget before an API call."""
+    limits = _ensure_limits(user_id)
+    minute_cap = max(1, int(limits["minute"] * RATE_LIMIT_SAFETY))
+    day_cap = max(1, int(limits["day"] * RATE_LIMIT_SAFETY))
+
+    state = _load_rate_state()
+    now = time.time()
+    reqs = [t for t in state.get("requests", []) if now - t < 86400]
+
+    # Day ceiling — hard stop, never loop.
+    if len(reqs) >= day_cap:
+        wait_h = (86400 - (now - min(reqs))) / 3600
+        state["requests"] = reqs
+        _save_rate_state(state)
+        print(
+            f"ERROR: daily request budget reached for account '{ACTIVE_ACCOUNT}' "
+            f"({len(reqs)}/{limits['day']} incl. {int(RATE_LIMIT_SAFETY*100)}% safety "
+            f"margin). Resets in ~{wait_h:.1f}h. Aborting to protect the account.",
+            file=sys.stderr,
+        )
+        sys.exit(1)
+
+    # Minute ceiling — wait out the rolling 60s window.
+    waited = 0.0
+    while True:
+        minute_reqs = [t for t in reqs if now - t < 60]
+        if len(minute_reqs) < minute_cap:
+            break
+        sleep_for = max(1.0, 60 - (now - min(minute_reqs)) + 0.5)
+        if waited + sleep_for > RATE_LIMIT_MAX_WAIT:
+            print(
+                f"WARNING: minute request budget for '{ACTIVE_ACCOUNT}' still full "
+                f"after {int(waited)}s — proceeding; Sklik may return 429.",
+                file=sys.stderr,
+            )
+            break
+        print(
+            f"Rate budget: {len(minute_reqs)}/{limits['minute']} req/min for "
+            f"'{ACTIVE_ACCOUNT}', waiting {sleep_for:.0f}s…",
+            file=sys.stderr,
+        )
+        time.sleep(sleep_for)
+        now = time.time()
+        reqs = [t for t in reqs if now - t < 86400]
+        waited += sleep_for
+
+    state["requests"] = reqs
+    _save_rate_state(state)
+
+
+def _record_request() -> None:
+    """Append the current request's timestamp to the rolling local budget."""
+    state = _load_rate_state()
+    now = time.time()
+    reqs = [t for t in state.get("requests", []) if now - t < 86400]
+    reqs.append(now)
+    state["requests"] = reqs
+    _save_rate_state(state)
+
+
+# ---------------------------------------------------------------------------
 # API call helper
 # ---------------------------------------------------------------------------
 
 _current_session: str | None = None
 
 
-def _api_call(method: str, params: list | None = None, user_id: int | None = None) -> dict:
+def _api_call(method: str, params: list | None = None, user_id: int | None = None,
+              _throttle: bool = True, _retries: int = 0) -> dict:
     """Make a Sklik DRAK API call with session management.
 
     First param is always the user struct with session.
     Handles 401 by re-authenticating once.
+
+    Respects the account's per-minute / per-day request budget (tracked locally
+    across sessions); `_throttle=False` skips the pre-check (used only for the
+    api.limits fetch itself, which is still counted).
     """
     global _current_session
 
     if _current_session is None:
         _current_session = _get_session()
+
+    # Stay inside the account's request budget before spending a request.
+    if _throttle:
+        _throttle_request(user_id)
+    _record_request()
 
     user_struct: dict[str, str | int] = {"session": _current_session}
     if user_id:
@@ -199,11 +346,17 @@ def _api_call(method: str, params: list | None = None, user_id: int | None = Non
         _current_session = data["session"]
         _save_session(_current_session)
 
-    # Handle rate limiting
+    # Handle rate limiting (429) — capped, backing-off retry so a throttled
+    # account is never hammered in an infinite loop.
     if data.get("status") == 429:
-        print("Rate limited, waiting 5s...", file=sys.stderr)
-        time.sleep(5)
-        return _api_call(method, params, user_id)
+        if _retries >= 3:
+            print(f"ERROR: {method} still rate-limited (429) after {_retries} retries — "
+                  f"giving up to protect account '{ACTIVE_ACCOUNT}'.", file=sys.stderr)
+            sys.exit(1)
+        wait = 5 * (_retries + 1)  # 5s, 10s, 15s
+        print(f"Rate limited (429), waiting {wait}s… (retry {_retries + 1}/3)", file=sys.stderr)
+        time.sleep(wait)
+        return _api_call(method, params, user_id, _throttle=_throttle, _retries=_retries + 1)
 
     # Handle errors
     if data.get("status") not in (200, 206):
@@ -448,6 +601,61 @@ def cmd_account(args: argparse.Namespace) -> None:
             for a in foreign:
                 print(f"  {a.get('username', '?')} (ID: {a.get('userId')}) "
                       f"[{a.get('access')}] credit: {_format_money(a.get('walletCredit'))}")
+
+
+def cmd_api_limits(args: argparse.Namespace) -> None:
+    """Show the account's API limits (rate limits, batch caps, value ranges)
+    plus the local request-budget usage tracked across sessions."""
+    data = _api_call("api.limits", user_id=getattr(args, "user_id", None), _throttle=False)
+    limits = data.get("limits", {}) or {}
+    batch = data.get("batchCallLimits", []) or []
+
+    # Local rolling usage from our own budget file.
+    state = _load_rate_state()
+    now = time.time()
+    reqs = [t for t in state.get("requests", []) if now - t < 86400]
+    minute_used = len([t for t in reqs if now - t < 60])
+    day_used = len(reqs)
+
+    def _range(lo: object, hi: object) -> str:
+        lo_c = _halere_to_czk(lo) if lo is not None else None
+        hi_c = _halere_to_czk(hi) if hi is not None else None
+        return f"{lo_c if lo_c is not None else '—'} – {hi_c if hi_c is not None else '—'} Kč"
+
+    if args.json:
+        _output_json({
+            "account": ACTIVE_ACCOUNT,
+            "limits": limits,
+            "batchCallLimits": batch,
+            "localUsage": {
+                "requestsLastMinute": minute_used,
+                "requestsLast24h": day_used,
+                "safetyFactor": RATE_LIMIT_SAFETY,
+            },
+        })
+        return
+
+    print(f"=== API limits — account '{ACTIVE_ACCOUNT}' ===")
+    print(f"Requests/minute:   {limits.get('minuteRequestLimit', '—')}  "
+          f"(local usage last 60s: {minute_used})")
+    print(f"Requests/day:      {limits.get('dayRequestLimit', '—')}  "
+          f"(local usage last 24h: {day_used})")
+    print(f"Stats rows/report: {limits.get('statsDataLimit', '—')}")
+    print(f"Safety margin:     CLI throttles at {int(RATE_LIMIT_SAFETY * 100)}% of these")
+    print()
+    print("Value ranges:")
+    print(f"  CPC:        {_range(limits.get('CpcMin'), limits.get('CpcMax'))}")
+    print(f"  CPM:        {_range(limits.get('CpmMin'), limits.get('CpmMax'))}")
+    print(f"  Day budget: {_range(limits.get('dayBudgetMin'), limits.get('dayBudgetMax'))}")
+    vat = limits.get("valueAddedTax")
+    if vat is not None:
+        print(f"  VAT:        {round(vat * 100)}%")
+    print(f"  Banner max: {limits.get('bannerSizeKBMax', '—')} KB")
+    if batch:
+        print()
+        print(f"Batch limits — max items per call ({len(batch)} entries):")
+        for b in batch:
+            print(f"  {str(b.get('name')):30} {b.get('limit')}")
 
 
 # ---------------------------------------------------------------------------
@@ -2133,6 +2341,13 @@ def main() -> None:
     p = subparsers.add_parser("account", help="Account info")
     p.add_argument("--json", **json_kwargs)
 
+    # --- api-limits ---
+    p = subparsers.add_parser(
+        "api-limits",
+        help="Show account API limits (rate/batch/value ranges) + local request-budget usage",
+    )
+    p.add_argument("--json", **json_kwargs)
+
     # --- pulse (account-wide compact digest) ---
     p = subparsers.add_parser(
         "pulse",
@@ -2508,6 +2723,7 @@ def main() -> None:
 
     commands = {
         "account": cmd_account,
+        "api-limits": cmd_api_limits,
         "pulse": cmd_pulse,
         "campaigns": cmd_campaigns,
         "campaign-create": cmd_campaign_create,
