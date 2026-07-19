@@ -8,25 +8,17 @@ Pokrývá kompletní životní cyklus *search* i *obsahových* kampaní — kamp
 
 ## 🆕 Co je nového
 
-**23. 6. 2026 — v1.4.0: Respektování API limitů — ochrana účtu** 🛡️
+Poslední verze **1.6.0** — retargeting publika na sestavy přes API (`retargeting-attach`), vylučující umístění, cílení na zájmy/témata/úmysly, přiřazování sitelinků, sdílené rozpočty, `*-restore` (undelete), `keyword-set`, kredit + validita statistik v `pulse`. Celá historie: **[CHANGELOG.md](CHANGELOG.md)**.
 
-Aby se předešlo riziku **throttlingu nebo zablokování účtu** kvůli překračování limitů API (reálné riziko zvlášť u klientských účtů s vysokými spendy), appka teď API limity **aktivně hlídá**:
+## Dva způsoby, jak appku používat
 
-- Nový příkaz [`api-limits`](#api-limits) zjistí reálné per-account limity za běhu (`minuteRequestLimit`, `dayRequestLimit`, `statsDataLimit`, batch capy) a ukáže i živé lokální využití (requesty za posledních 60 s / 24 h).
-- **Lokální request-budget napříč session.** Každé volání se počítá do per-account souboru `.rate_limit_<account>.json`, který přežívá restart i paralelní běhy, a kontroluje se *před* každým requestem: na 90 % minutového limitu počká do uvolnění okna, na denním limitu operaci **odmítne** (místo nekonečného mlácení do API). Limity se berou z `api.limits` (cache ~1×/den), ne natvrdo.
-- `429` retry je nově **capovaný** (3× s back-offem, pak skončí); `413` (přetečení dávky) a doporučené limity počtu entit jsou zdokumentované ve skillu.
+**A) Orchestrace přes Claude Code (výchozí a nejjednodušší).** Appku řídí Claude Code (nebo jiný coding agent) přes přibalený skill — ty zadáváš cíle česky, agent volá CLI, drží bezpečnostní pravidla (schválení před zápisem, `--confirm` u mazání, atomická výměna inzerátů) a hlídá API limity. Nejrychlejší start: otevři Claude Code a vlož mu prompt typu:
 
-**20. 6. 2026 — v1.3.0: `pulse` — přehled účtu jedním voláním** ⚡
+> *Naklonuj https://github.com/faborsky/sklik-ppc-app, spusť `./setup.sh`, nainstaluj mi přibalený skill podle `skill/INSTALL.md` a pak mi řekni, kam mám vložit svůj Sklik API token.*
 
-Přibyl příkaz [`pulse`](#pulse) — **account-wide souhrn jedním voláním**: totály, per-kampaň statistiky, delty vůči předchozímu stejně dlouhému období a top movery, vše předpočítané do kompaktního digestu (~400 tokenů). Nahrazuje řetězení `account` + `campaigns` + `campaign-stats`, takže analytický pull (i přes Claude Code) je výrazně levnější na tokeny a rychlejší. `--days N` (default 7), `--date-from/--date-to`, `--no-compare`, `--json`. Do granulárních `*-stats` se jde až na to, co `pulse` vypíchne.
+Claude vše připraví; **token pak vlož ručně do `.env`** (soubor je v `.gitignore` — token nikdy neposílej do chatu ani nikam do kódu). Odteď stačí `/sklik-ppc` z libovolného projektu. Detaily instalace skillu: [skill/INSTALL.md](skill/INSTALL.md).
 
-**10. 6. 2026 — v1.2.0: Cílení na umístění (placementy)** 🎯
-
-Přibyly příkazy [`placements`, `placement-create`, `placement-remove`](#umístění-cílení-na-konkrétní-weby) — cílení obsahových sestav na konkrétní weby přes API (`patterns.*` namespace). Vzor je doména nebo cesta (`"forbes.cz"`, `"www.e15.cz/byznys"`), volitelně s vlastním CPC. Pozor: nová obsahová sestava bez umístění běží po **celé** obsahové síti — placementy přidávejte před aktivací kampaně.
-
-**10. 6. 2026 — v1.1.0: Kombinovaná (nativní) reklama** 🎉
-
-Přibyl příkaz [`combined-create`](#kombinovaná-nativní-reklama) — vytváření **kombinované reklamy** přes API. To je formát, kterým se na obsahové síti Seznamu zobrazuje i **nativní reklama v článcích**: dodáš texty + obrázky a Sklik z nich sám skládá podobu pro nativní pozice v článcích i responzivní bannerové sloty. Výpis přes `ads` (`adType: combined`), statistiky přes `ad-stats`.
+**B) Vlastní automatizace a agentní řešení (pro pokročilé).** Appka je normální CLI stavěné na strojové řízení: `--json` výstupy, chyby jako `{"error": …}` na stdout, request-budget vestavěný (neuřídíš API limity omylem). Vezmi si ji do vlastních skriptů, cronů nebo agentních workflow — kompletní referenci příkazů máš níže v tomhle README a chování API (quirky, limity, status kódy) v [docs/api-notes.md](docs/api-notes.md).
 
 ## Požadavky
 
@@ -87,7 +79,7 @@ python sklik_cli.py --account clientb account         # jiný login
 python sklik_cli.py --user-id 123456 campaigns        # spravovaný účet pod aktivním loginem
 ```
 
-> `suggest` a `suggest-stats` `--user-id` nepodporují (ale `--account` ano).
+> `suggest` a `suggest-stats` přepínač `--user-id` tiše ignorují (API metody parametr spravovaného účtu nemají) — volej je bez něj. `--account` funguje normálně.
 
 ## Použití
 
@@ -112,6 +104,10 @@ Příkazy se spouští přes `run.sh` (sám aktivuje venv):
 |--------|-------|
 | `account` | Info o účtu, zůstatek peněženky, spravované účty |
 | `api-limits` | Reálné API limity účtu (rate/batch/hodnotové rozsahy) + živé lokální využití request-budgetu; `--json` |
+| `credit` | Zůstatek kreditu peněženky v Kč (bez DPH i s DPH) — i pro spravované účty; `--json` |
+| `regions` | Číselník ID regionů pro `--regions` cílení; `--json` |
+| `autotagging` | Aktuální konfigurace autotaggingu (UTM parametry); `--json` |
+| `autotagging-update` | `--enabled on/off`, `--config-json` (částečná konfigurace, mergne se přes současnou); `--json` |
 
 ```bash
 ./run.sh api-limits            # limity + kolik requestů jsi spotřeboval (60 s / 24 h)
@@ -135,57 +131,69 @@ Souhrn celého účtu **jedním voláním** — místo řetězení `account` + `
 ./run.sh pulse --json          # strukturovaný výstup pro další zpracování
 ```
 
+> `pulse` si přes `stats.status` ověří, že statistiky za celé okno jsou už kompletní — když ne (typicky dnešek je „preparing"), přidá varování (`statsWarning` v `--json`), že čísla a delty jsou zatím z částečných dat.
+
 ### Kampaně
 
 | Příkaz | Klíčové přepínače |
 |--------|-------------------|
 | `campaigns` | `--status active/suspend`, `--json` |
-| `campaign-create` | `--name`, `--day-budget` (CZK), `--type fulltext/context/product`, `--regions`, `--device-bids`, `--json` |
-| `campaign-update` | `--campaign-id`, `--name`, `--day-budget`, `--status`, `--regions`, `--device-bids`, `--schedule-json`, `--json` |
+| `campaign-create` | `--name`, `--day-budget` (CZK), `--type fulltext/context/product`, `--status active/suspend`, `--regions`, `--device-bids`, `--ad-selection`, `--json` |
+| `campaign-update` | `--campaign-id`, `--name`, `--day-budget`, `--status`, `--regions`, `--device-bids`, `--schedule-json`, `--ad-selection`, `--json` |
 | `campaign-remove` | `--campaign-id`, `--confirm`, `--json` |
 | `campaign-stats` | `--campaign-id`, `--date-from`, `--date-to`, `--json` |
 | `campaign-targeting` | `--campaign-id`, `--json` — přehled geo / zařízení / rozvrhu |
+| `campaign-restore` | `--campaign-id`, `--json` — obnoví smazanou kampaň (undelete) |
 
 **Cílení** (`campaign-create` / `campaign-update`):
 
 - `--regions` — ID regionů oddělená čárkou (prázdný řetězec při update geo cílení smaže)
 - `--device-bids` — modifikátory v % jako `desktop:mobile:tablet:other`, např. `0:-30:-30:-100`
 - `--schedule-json` (jen update) — `{"daySchedule":[{"value":[24 hodinových hodnot 0-100]}, …×7]}`, týden začíná pondělím
+- `--ad-selection` — rotace inzerátů (`adSelection`): `weighted` (preferuj vyšší CTR, výchozí), `random` (rovnoměrně — čistý A/B test kreativ), `cpa` (nižší CPA), `cos` (nižší CTR)
 
 ### Sestavy (ad groups)
 
 | Příkaz | Klíčové přepínače |
 |--------|-------------------|
 | `groups` | `--campaign-id`, `--json` |
-| `group-create` | `--campaign-id`, `--name`, `--cpc` (CZK), `--json` |
-| `group-update` | `--group-id`, `--name`, `--cpc`, `--status`, `--json` |
+| `group-create` | `--campaign-id`, `--name`, `--cpc` (CZK), `--max-daily-impression`, `--json` |
+| `group-update` | `--group-id`, `--name`, `--cpc`, `--status`, `--max-daily-impression`, `--json` |
 | `group-remove` | `--group-id`, `--confirm`, `--json` |
 | `group-stats` | `--group-id`, `--campaign-id`, `--date-from`, `--date-to`, `--json` |
+| `group-restore` | `--group-id`, `--json` — obnoví smazanou sestavu (undelete) |
+
+> `--max-daily-impression N` = frekvenční limit (max. zobrazení na uživatele za den) — Sklik pole `maxUserDailyImpression`.
 
 ### Klíčová slova
 
 | Příkaz | Klíčové přepínače |
 |--------|-------------------|
 | `keywords` | `--group-id`, `--campaign-id`, `--json` |
-| `keyword-create` | `--group-id`, `--name`, `--match-type broad/phrase/exact`, `--cpc` (CZK), `--json` |
+| `keyword-create` | `--group-id`, `--name`, `--match-type broad/phrase/exact`, `--cpc` (CZK), `--url`, `--json` |
 | `keyword-create-batch` | `--group-id`, `--keywords-json`, `--json` |
 | `keyword-update` | `--keyword-id`, `--cpc`, `--status`, `--url`, `--json` |
 | `keyword-remove` | `--keyword-id`, `--confirm`, `--json` |
 | `keyword-stats` | `--group-id`, `--campaign-id`, `--date-from`, `--date-to`, `--json` |
+| `keyword-restore` | `--keyword-id`, `--json` — obnoví smazané slovo (undelete) |
+| `keyword-set` | `--group-id`, `--keywords-json`, `--remove-others`, `--json` — deklarativní nastavení slov sestavy |
 
 > `name` ani `matchType` klíčového slova nelze měnit — je nutné slovo smazat a vytvořit znovu.
+> `keyword-set` je **upsert**: chybějící slova přidá, existujícím upraví CPC/URL, dříve smazaná obnoví. S `--remove-others` navíc smaže všechna slova, která v payloadu nejsou — plná synchronizace sestavy podle seznamu.
 
 ### Inzeráty (ETA)
 
 | Příkaz | Klíčové přepínače |
 |--------|-------------------|
-| `ads` | `--group-id`, `--json` |
-| `ad-create` | `--group-id`, `--headline1/2/3`, `--description1/2`, `--final-url`, `--path1/2`, `--json` |
-| `ad-update` | `--ad-id`, `--status`, `--json` |
+| `ads` | `--group-id`, `--campaign-id`, `--json` |
+| `ad-create` | `--group-id`, `--headline1/2/3`, `--description1/2` (alias `--description`), `--final-url`, `--path1/2`, `--json` |
+| `ad-update` | `--ad-id`, `--status`, `--json` (jen stav, na místě) |
+| `ad-replace` | `--ad-id`, `--headline1/2/3`, `--description/--description2`, `--final-url`, `--path1/2`, `--json` |
 | `ad-remove` | `--ad-id`, `--confirm`, `--json` |
 | `ad-stats` | `--group-id`, `--date-from`, `--date-to`, `--json` |
+| `ad-restore` | `--ad-id`, `--json` — obnoví smazaný inzerát (undelete) |
 
-> Změna kreativních polí inzerátu vytvoří nový inzerát (API vrací `newAdIds`).
+> **Změna textu inzerátu = `ad-replace`, NIKDY ruční `ad-remove` + `ad-create`.** Sklik neumí text upravit na místě: jakákoli změna kreativy udělá přes `ads.update` **atomickou výměnu na serveru** (smaže starý + vytvoří nový v JEDNÉ operaci, vrátí `newAdIds`). Když nový inzerát neprojde validací (typicky `ad_duplicate_in_db`), **původní zůstane nedotčený**. Ruční remove+create tuhle jistotu nemá — když selže create po removu, sestava tiše ztratí inzerát (reálně se to stalo). `ad-replace` načte stávající inzerát, aplikuje jen zadaná pole (zbytek zachová), předvaliduje přes `ads.check` a pak provede atomickou výměnu. Jen textové (eta) inzeráty.
 
 ### Kombinovaná (nativní) reklama
 
@@ -197,7 +205,7 @@ Formát pro obsahovou síť, kterým se zobrazuje i **nativní reklama v článc
 
 Výpis přes `ads` (`adType: combined`), statistiky přes `ad-stats`, smazání přes `ad-remove`. Obrázky: lokální cesta nebo URL (jpg/png/gif, max 1 MB), CLI je zakóduje samo.
 
-> **Pozor:** Sklik z textů **tiše odstraňuje zakázané znaky** (např. pomlčku „—" z titulku) — bez chyby i bez warningu. Po vytvoření si finální znění ověř přes `ads --group-id X --json`. Úprava textů/obrázků není možná — smaž (`ad-remove`) a vytvoř znovu.
+> **Pozor:** Sklik z textů **tiše odstraňuje zakázané znaky** (např. pomlčku „—" z titulku) — bez chyby i bez warningu. Po vytvoření si finální znění ověř přes `ads --group-id X --json`. Kombinovanou reklamu nelze upravit na místě (`ad-replace` je jen pro textové inzeráty kvůli obrázkům) — **vytvoř nový inzerát, ověř, a teprve pak smaž starý** (create-first, aby selhaný create nikdy nesmazal poslední inzerát).
 
 ### Vylučující klíčová slova
 
@@ -207,6 +215,8 @@ Výpis přes `ads` (`adType: combined`), statistiky přes `ad-stats`, smazání 
 | `negative-add` | `--group-id`/`--campaign-id`, `--name`, `--match-type negativeBroad/negativePhrase/negativeExact`, `--json` |
 | `negative-add-batch` | `--group-id`/`--campaign-id`, `--keywords-json`, `--json` |
 | `negative-remove` | `--keyword-id`, `--confirm`, `--json` |
+
+> `negatives` umí vypsat jen **skupinové** vylučovačky (`--campaign-id` filtruje přes sestavy dané kampaně). Kampaňové vylučovačky (`negative-add --campaign-id`) jsou v API **write-only** — zapsat jdou, ale zpětně vypsat ne; ověříš je jen ve webovém rozhraní Skliku.
 
 ### Výzkum klíčových slov
 
@@ -227,7 +237,12 @@ Výpis přes `ads` (`adType: combined`), statistiky přes `ad-stats`, smazání 
 |--------|-------------------|
 | `sitelinks` | `--json` |
 | `sitelink-create` | `--name`, `--url`, `--json` |
+| `sitelink-update` | `--sitelink-id`, `--name`, `--url`, `--json` |
 | `sitelink-remove` | `--sitelink-id`, `--confirm`, `--json` |
+| `sitelink-assign` | `--campaign-id` **nebo** `--group-id`, `--sitelink-ids "1,2,3"` (`""` = odpojit vše), `--json` |
+| `sitelinks-assigned` | `--campaign-id` **nebo** `--group-id`, `--json` — co je aktuálně přiřazené |
+
+> **`sitelink-assign` NAHRAZUJE celou sadu** přiřazených sitelinků kampaně/sestavy — vždy pošli kompletní seznam, ne jen přírůstek. **Přejmenování sitelinku (`sitelink-update --name`) vytvoří NOVÉ ID** (server dělá remove+create) — CLI nové ID vypíše; změna `--url` ID zachová.
 
 ### Konverze (definice měření)
 
@@ -251,6 +266,15 @@ Konverze = pojmenovaná definice cílové akce (nákup, registrace…) a její h
 | `retargeting-create` | `--name`, `--membership` (dny), `--description`, `--use-historic`, `--take-all-users`, `--conditions-json`, `--json` |
 | `retargeting-update` | `--list-id`, `--name`, `--membership`, `--description`, `--json` |
 | `retargeting-remove` | `--list-id`, `--confirm`, `--json` |
+| `retargeting-attach` | `--list-id`, `--group-id`, `--json` — napojí publikum na sestavu jako cílení |
+| `retargeting-detach` | `--list-id`, `--group-id`, `--confirm`, `--json` |
+| `retargeting-attached` | `--group-id` (bez něj všechny sestavy), `--json` — co je kde napojené |
+| `retargeting-exclude` | `--list-id`, `--campaign-id` **nebo** `--group-id`, `--json` — vyloučí publikum (negativní retargeting) |
+| `retargeting-exclude-remove` | `--list-id`, `--campaign-id`/`--group-id`, `--confirm`, `--json` |
+| `retargeting-excluded` | `--campaign-id`/`--group-id` (bez nich vše na obou úrovních), `--json` |
+
+> Publikum jde napojit jen na sestavy **obsahových** kampaní. Pokus o napojení **smazaného** seznamu vrací `406 Bad values` bez bližší diagnostiky — zkontroluj `deleted` ve výpisu `retargeting --json`.
+> **Vyloučení publika** (`retargeting-exclude`) funguje na úrovni kampaně i sestavy — typicky „vyluč stávající zákazníky z akviziční kampaně". Na rozdíl od napojení funguje i na search kampaních.
 
 ### Obrázkové bannery
 
@@ -261,9 +285,13 @@ Statické bannery (jpg/png/gif) pro obsahovou síť. Pro HTML5 bannery použij j
 | `banner-formats` | `--json` — povolené rozměry a limity velikosti |
 | `banners` | `--group-id`, `--json` |
 | `banner-create` | `--group-id`, `--name`, `--clickthru-url`, `--image` (lokální cesta **nebo** http URL), `--status`, `--json` |
+| `banner-download` | `--group-id`, `--out` (složka), `--json` — stáhne obrázky bannerů sestavy na disk |
+| `banner-update` | `--banner-id`, `--name`, `--clickthru-url`, `--status`, `--json` (beze změny obrázku) |
 | `banner-remove` | `--banner-id`, `--confirm`, `--json` |
+| `banner-restore` | `--banner-id`, `--json` — obnoví smazaný banner (undelete) |
 
 > `--image` přijme lokální soubor i veřejnou URL — CLI obrázek načte a pošle do Skliku zakódovaný (base64). Drž se povolených formátů z `banner-formats` (pevné rozměry, ≤ 250 KB).
+> `banner-download` čte `image.url` (staré pole `imageURL` je deprecated) a uloží kreativy lokálně — vhodné pro verzování kreativ do repa před výměnou. Výměna banneru = **vytvoř nový a teprve pak smaž starý** (create-first).
 
 ### Umístění (cílení na konkrétní weby)
 
@@ -274,8 +302,46 @@ Cílení obsahových sestav na konkrétní weby (v Skliku „umístění"). Vzor
 | `placements` | `--group-id`, `--json` |
 | `placement-create` | `--group-id`, `--pattern "forbes.cz"`, `--cpc` (CZK, volitelně přebije CPC sestavy), `--status`, `--json` |
 | `placement-remove` | `--pattern-id`, `--confirm`, `--json` |
+| `placements-excluded` | `--group-id`, `--json` — výpis vyloučených webů |
+| `placement-exclude` | `--group-id`, `--pattern "spamweb.cz"`, `--json` — vyloučí web ze sestavy |
+| `placement-exclude-remove` | `--pattern-id`, `--confirm`, `--json` |
+| `placement-exclude-restore` | `--pattern-id`, `--json` — znovu vyloučí dříve odvyloučený web |
 
-> **Pozor:** Nová obsahová sestava bez umístění běží po **celé** obsahové síti. Když chcete cílit na konkrétní weby, přidejte umístění **před aktivací** kampaně. Vylučující umístění (`patterns.negative.*`) zatím CLI neobaluje.
+> **Pozor:** Nová obsahová sestava bez umístění běží po **celé** obsahové síti. Když chcete cílit na konkrétní weby, přidejte umístění **před aktivací** kampaně.
+> **Quirky vyloučených umístění** (ověřeno 2026-07): (1) API ve výpisu **nevrací text vzoru** — `placements-excluded` ukáže jen ID, sestavu a datum; text vidíš ve web UI, tak si ho po `placement-exclude` poznamenej (ID se vrací). (2) Smazané vyloučení **blokuje opětovné vyloučení stejného vzoru** (`group_pattern_duplicity`) — místo nového create použij `placement-exclude-restore` se starým ID.
+
+### Cílení obsahové sítě: zájmy / témata / úmysly
+
+Tři dimenze cílení obsahových sestav nad rámec umístění a publik: **zájmy** (interest — dlouhodobé zájmy uživatele), **témata** (theme — tematika webů, kde se reklama zobrazí) a **úmysly** (intend — nákupní záměr). Všechny sdílejí stejné příkazy s přepínačem `--type interest/theme/intend`; váží se na **sestavu**.
+
+| Příkaz | Klíčové přepínače |
+|--------|-------------------|
+| `targeting-categories` | `--type`, `--json` — číselník kategorií dané dimenze |
+| `targeting` | `--type`, `--group-id`, `--negative` (výpis vyloučení), `--json` |
+| `targeting-add` | `--type`, `--group-id`, `--category-id`, `--cpc`/`--cpt` (CZK, volitelně), `--status`, `--json` |
+| `targeting-exclude` | `--type`, `--group-id`, `--category-id`, `--json` — vyloučí kategorii |
+| `targeting-remove` | `--type`, `--id`, `--negative`, `--confirm`, `--json` |
+| `targeting-restore` | `--type`, `--id`, `--negative`, `--json` — obnoví smazané cílení |
+
+> Mazání je **soft-delete**: opětovné přidání stejné kategorie po smazání vrací `409 entity_already_exists` — použij `targeting-restore` se starým ID (CLI výpisy smazané položky skrývají, ID najdeš v původním výstupu `targeting-add`/`targeting-remove`).
+
+```bash
+./run.sh targeting-categories --type theme                       # jaká témata existují
+./run.sh targeting-add --type theme --group-id 123 --category-id 102   # cíl na Auto-moto
+./run.sh targeting-exclude --type theme --group-id 123 --category-id 103  # vyluč Bulvár
+./run.sh targeting --type theme --group-id 123                   # co je nastavené
+```
+
+### Sdílené rozpočty
+
+Jeden denní rozpočet sdílený více kampaněmi. Přiřazení kampaní se řídí **na rozpočtu** (ne přes `campaign-update`).
+
+| Příkaz | Klíčové přepínače |
+|--------|-------------------|
+| `budgets` | `--json` — výpis vč. přiřazených kampaní a čerpání |
+| `budget-create` | `--name`, `--day-budget` (Kč), `--campaign-ids "1,2"`, `--json` |
+| `budget-update` | `--budget-id`, `--name`, `--day-budget`, `--add-campaign-ids`, `--remove-campaign-ids`, `--remove-all-campaigns`, `--json` |
+| `budget-remove` | `--budget-id`, `--confirm`, `--json` |
 
 ## Příklady
 
@@ -334,12 +400,20 @@ Skill ti dává **mechaniku** (jak věci udělat nástrojem) a **pravidla** (co 
 
 ```
 sklik-ppc-app/
-├── sklik_cli.py        # Celé CLI (jeden soubor)
+├── sklik_cli.py        # Tenký entrypoint (volá sklik.cli.main)
+├── sklik/              # Balík s implementací
+│   ├── api.py          #   engine: auth, session, rate-limit, _api_call, chyby
+│   ├── formatting.py   #   převod CZK⇄haléře + JSON výstup
+│   ├── reports.py      #   dvoukrokový report helper
+│   ├── images.py       #   načítání/kódování obrázků (bannery + combined)
+│   ├── cli.py          #   argparse + dispatch
+│   └── commands/       #   jeden modul na doménu (ads, campaigns, keywords, …)
 ├── requirements.txt    # Závislosti (requests, python-dotenv)
-├── setup.sh            # Instalační skript
-├── run.sh              # Spouštěcí skript (aktivuje venv)
+├── setup.sh · run.sh   # Instalační / spouštěcí skript (aktivuje venv)
 ├── .env.example        # Šablona pro tokeny
-├── CLAUDE.md           # Vývojářská reference
+├── CLAUDE.md           # Signpost pro Claude Code (+ dokumentační mapa)
+├── docs/api-notes.md   # Hutná reference chování API Drak
+├── CHANGELOG.md        # Historie verzí
 ├── .env                # Tokeny (NEVERZOVAT)
 └── skill/              # Skill pro Claude Code (/sklik-ppc) + INSTALL.md
 ```
@@ -350,6 +424,8 @@ sklik-ppc-app/
 - Reporty jsou dvoukrokové: `createReport` (filtry + období) → `readReport` (stránkování + sloupce).
 - API **nepodporuje** filtry na nadřazené entity (`campaign.ids`, `group.ids`, `status`) v `restrictionFilter` — proto se aplikují na straně klienta.
 - Příklady použití API Drak: [github.com/seznam/sklik-api-examples](https://github.com/seznam/sklik-api-examples).
+
+> Kompletní chování API (kvirky reportů, bezpečná výměna inzerátů, bannery, konverze, retargeting, rate limity, stavové kódy): **[docs/api-notes.md](docs/api-notes.md)**.
 
 ## O kurzu AI First
 

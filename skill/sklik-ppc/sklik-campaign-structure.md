@@ -59,7 +59,7 @@
 - **Max CPC na úrovni sestavy** jako default — přepsat na KW úrovni jen pro TOP slova
 
 ### Device Price Ratio
-- Nastavuje se na kampani i sestavě
+- Sklik ho umí na kampani i sestavě; **CLI ho nastavuje jen na kampani** (`--device-bids` u `campaign-create`/`campaign-update`)
 - Default: desktop=100, mobile=80, tablet=70
 - Upravit dle dat: pokud mobil konvertuje lépe → zvýšit
 
@@ -132,4 +132,4 @@
 - Max 4 zobrazené (přidej 4–6, Sklik vybere nejlepší)
 - Každý sitelink = jiná stránka / nabídka
 - Zvyšují CTR o 10–20 %
-- Přiřazují se na úrovni kampaně
+- Ve Skliku se přiřazují na úrovni kampaně; **CLI je umí jen vytvořit/vypsat/smazat** (`sitelink-create --name --url`) — přiřazení ke kampani se dělá ve webovém rozhraní

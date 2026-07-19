@@ -1,6 +1,6 @@
 # Sklik Search App — CLI for Sklik DRAK API
 
-Python CLI for managing PPC search campaigns on Seznam Sklik via the DRAK JSON API.
+Python CLI for managing PPC search & display campaigns on Seznam Sklik via the DRAK JSON API. Built to be driven by a human **and** by Claude Code: structured `--json` I/O, parseable errors, and a self-enforcing per-account request budget.
 
 ## Setup
 
@@ -9,197 +9,73 @@ source venv/bin/activate && python sklik_cli.py <command> [flags]
 # or: ./run.sh <command> [flags]
 ```
 
-## Authentication
+## Code structure
 
-- Tokens in `.env`, one env var per login:
-  - `SKLIK_API_TOKEN` — the `default` account (used when `--account` is omitted)
-  - `SKLIK_API_TOKEN_<NAME>` — a named account, selected with `--account <name>`
-- Accounts are discovered from the environment at runtime — no names are hardcoded.
-- Session cached per account in `.session_cache_<account>.json` (25 min TTL)
-- Auto-reconnects on 401 (expired session)
+The implementation is a package under `sklik/`; `sklik_cli.py` is a thin entrypoint.
 
-## Accounts
+- `sklik/api.py` — **engine**: config, account/token discovery, auth + session cache, the cross-session **request budget** (rate limiting), `_api_call`, and structured errors (`_fail` / `_fail_msg`).
+- `sklik/formatting.py` — CZK⇄haléře conversion + `_output_json`.
+- `sklik/reports.py` — two-step report helper (`createReport` → `readReport`).
+- `sklik/images.py` — image loading/base64 shared by combined ads and banners.
+- `sklik/commands/*.py` — one module per domain (`account`, `campaigns`, `groups`, `keywords`, `ads`, `research`, `sitelinks`, `conversions`, `retargeting`, `banners`, `placements`).
+- `sklik/cli.py` — argparse wiring + dispatch.
 
-Each account is a SEPARATE Sklik login with its own token. Two independent global flags (before the subcommand):
+Shared mutable state (`ACTIVE_ACCOUNT`, `_JSON_OUTPUT`, session) lives in `api.py` and changes only through `api.set_account()` / `api.set_json_output()`. Command modules read it via the `api` module — never `from sklik.api import ACTIVE_ACCOUNT`, which would copy a stale value. `BASE_DIR` in `api.py` resolves to the project root, so `.env` and the `.session_cache_*` / `.rate_limit_*` files stay where they were.
 
-- **`--account <name>`** — which token/login to use. Omitted = `default` (`SKLIK_API_TOKEN`); `--account <name>` reads `SKLIK_API_TOKEN_<NAME>` (uppercased).
-- **`--user-id <id>`** — a MANAGED account under the active login (e.g. agency → client account).
+## Authentication & accounts
 
-A token-less or unknown `--account` fails with an error listing the configured accounts.
+- Tokens in `.env`, one env var per login: `SKLIK_API_TOKEN` = the `default` account (used when `--account` is omitted); `SKLIK_API_TOKEN_<NAME>` = a named account (`--account <name>`, uppercased). Accounts are discovered at runtime — no names hardcoded.
+- Session cached per account in `.session_cache_<account>.json` (25 min TTL); auto-reconnects on 401.
+- **`--account <name>`** and **`--user-id <id>`** are independent global flags (before the subcommand). `--account` picks the login/token; `--user-id` acts on a MANAGED account under the active login (agency → client).
+- A token-less/unknown `--account` fails with an error listing the configured accounts. `suggest`/`suggest-stats` silently ignore `--user-id` (the API methods take no managed-user param) — call them without it.
 
-The `suggest` and `suggest-stats` commands don't support `--user-id` (but do accept `--account`).
+## Price convention
 
-## Price Convention
+CLI accepts/displays **CZK**; the API uses haléře (100 = 1 Kč). Conversion is automatic both ways.
 
-- **CLI accepts/displays prices in CZK** (Kč)
-- API uses haléře internally (100 haléřů = 1 Kč)
-- CLI converts automatically in both directions
+## Commands (88, grouped)
 
-## Commands Reference
+**Full flag reference + examples: [README.md](README.md).** Index:
 
-### Account
-| Command | Description |
-|---------|-------------|
-| `account` | Account info, wallet balance, managed accounts |
-| `api-limits` | Account API limits (rate/batch/value ranges) + local request-budget usage; `--json` |
+- **Overview:** `account`, `api-limits`, `pulse` (warns when the window's stats aren't complete yet), `credit`, `regions`, `autotagging`, `autotagging-update`
+- **Campaigns:** `campaigns`, `campaign-create/update/remove/restore/stats/targeting` — targeting: `--regions`, `--device-bids`, `--schedule-json`, `--ad-selection {weighted,random,cpa,cos}`
+- **Groups:** `groups`, `group-create/update/remove/restore/stats` — `--max-daily-impression` = frequency cap
+- **Keywords:** `keywords`, `keyword-create`, `keyword-create-batch`, `keyword-update/remove/restore/stats`, **`keyword-set`** (declarative upsert; `--remove-others` = full sync)
+- **Ads:** `ads`, `ad-create`, `combined-create`, `ad-update` (status only), **`ad-replace`** (safe atomic text change), `ad-remove`, `ad-restore`, `ad-stats`
+- **Negatives:** `negatives`, `negative-add`, `negative-add-batch`, `negative-remove`
+- **Research:** `suggest`, `suggest-stats`, `search-queries`
+- **Sitelinks:** `sitelinks`, `sitelink-create/update/remove`, `sitelink-assign` (campaign/group; REPLACES the whole set), `sitelinks-assigned`
+- **Conversions:** `conversions`, `conversion-types`, `conversion-create/update/remove`
+- **Retargeting:** `retargeting`, `retargeting-create/update/remove`, **`retargeting-attach/detach`** (audience ↔ group), `retargeting-attached`, **`retargeting-exclude`** (+`-remove`) — negative retargeting at campaign OR group level, `retargeting-excluded`
+- **Banners:** `banner-formats`, `banners`, `banner-create`, `banner-download`, `banner-update`, `banner-remove`, `banner-restore`
+- **Placements:** `placements`, `placement-create/remove`, `placements-excluded`, `placement-exclude` (+`-remove`/`-restore`) — negative placements
+- **Display targeting:** `targeting-categories`, `targeting`, `targeting-add`, `targeting-exclude`, `targeting-remove`, `targeting-restore` — unified `--type interest/theme/intend`
+- **Shared budgets:** `budgets`, `budget-create/update/remove` — campaign assignment lives on the budget; amounts in plain CZK
 
-### Pulse
-| Command | Key Flags |
-|---------|-----------|
-| `pulse` | `--days N` (default 7), `--date-from`/`--date-to`, `--no-compare`, `--json` |
+## Safety
 
-Account-wide digest in ONE call: per-campaign report for the window + previous equal-length window, aggregated to totals + per-campaign deltas + top movers. Built on `_fetch_report("campaigns", …)` (granularity `total`); two report calls (one if `--no-compare`). Purpose: token-cheap analytics pull — emits a small pre-aggregated summary instead of raw rows, so callers don't chain `account` + `campaigns` + `campaign-stats`.
+- Destructive ops (`*-remove`) require `--confirm`.
+- Parse programmatic output with `--json`; on failure the error comes back as `{"error": …}` on **stdout** (human text on stderr otherwise).
+- The CLI self-enforces the account's request budget — don't fan out hundreds of parallel write calls or tight-retry loops.
+- Default stats window = last 30 days.
 
-### Campaigns
-| Command | Key Flags |
-|---------|-----------|
-| `campaigns` | `--status active/suspend`, `--json` |
-| `campaign-create` | `--name`, `--day-budget` (CZK), `--type fulltext`, `--json` |
-| `campaign-update` | `--campaign-id`, `--name`, `--day-budget`, `--status`, `--json` |
-| `campaign-remove` | `--campaign-id`, `--confirm`, `--json` |
-| `campaign-stats` | `--campaign-id`, `--date-from`, `--date-to`, `--json` |
-| `campaign-targeting` | `--campaign-id`, `--json` (shows geo/device/schedule) |
+## ⚠️ Critical for automation (read before scripting writes)
 
-**Campaign targeting** (`campaign-create` / `campaign-update`):
-- `--regions` — comma-separated region IDs for geo targeting (empty string on update clears them)
-- `--device-bids` — `desktop:mobile:tablet:other` % modifiers, e.g. `0:-30:-30:-100`
-- `--schedule-json` (update only) — `{"daySchedule":[{"value":[24 hourly 0-100]}, …×7]}`
+- **Change ad text with `ad-replace`, NEVER `ad-remove` + `ad-create` by hand.** `ads.update` does an atomic delete-old + create-new server-side, so a failed validation keeps the original ad; a manual remove+create silently drops the ad when the create fails (this caused a real production incident). Combined/banner "replace" = create-first, then remove.
+- **Filtering is client-side.** The API ignores parent-entity filters (`campaign.ids`/`group.ids`/`status`) in restrictions; `--campaign-id`/`--group-id`/`--status` filter locally after fetch.
+- **Audiences attach to groups via `retargeting-attach`/`retargeting-detach`/`retargeting-attached`** (v1.6.0; `retargeting.group.lists.*`). Attaching a **deleted** list fails with a bare `406 Bad values` — check `deleted` in `retargeting --json` first.
+- **Soft-delete quirks**: re-adding a removed display-targeting category → `409 entity_already_exists` (use `targeting-restore`); re-excluding a removed negative placement → `group_pattern_duplicity` (use `placement-exclude-restore`). `placements-excluded` cannot show the pattern text (API never returns it).
+- **Batch writes are all-or-nothing**; split payloads over the per-method cap (typically ≤100 for create/update/remove). Check caps with `api-limits`.
 
-### Groups (ad groups)
-| Command | Key Flags |
-|---------|-----------|
-| `groups` | `--campaign-id`, `--json` |
-| `group-create` | `--campaign-id`, `--name`, `--cpc` (CZK), `--json` |
-| `group-update` | `--group-id`, `--name`, `--cpc`, `--status`, `--json` |
-| `group-remove` | `--group-id`, `--confirm`, `--json` |
-| `group-stats` | `--group-id`, `--campaign-id`, `--date-from`, `--date-to`, `--json` |
+Full API behaviour, quirks, rate-limit internals and status codes: **[docs/api-notes.md](docs/api-notes.md)**.
 
-### Keywords
-| Command | Key Flags |
-|---------|-----------|
-| `keywords` | `--group-id`, `--campaign-id`, `--json` |
-| `keyword-create` | `--group-id`, `--name`, `--match-type broad/phrase/exact`, `--cpc` (CZK), `--json` |
-| `keyword-create-batch` | `--group-id`, `--keywords-json` (JSON array), `--json` |
-| `keyword-update` | `--keyword-id`, `--cpc`, `--status`, `--url`, `--json` |
-| `keyword-remove` | `--keyword-id`, `--confirm`, `--json` |
-| `keyword-stats` | `--group-id`, `--campaign-id`, `--date-from`, `--date-to`, `--json` |
+## Release checklist
 
-### Ads
-| Command | Key Flags |
-|---------|-----------|
-| `ads` | `--group-id`, `--json` |
-| `ad-create` | `--group-id`, `--headline1`, `--headline2`, `--headline3`, `--description1`, `--description2`, `--final-url`, `--path1`, `--path2`, `--json` |
-| `ad-update` | `--ad-id`, `--status`, `--json` |
-| `ad-remove` | `--ad-id`, `--confirm`, `--json` |
-| `ad-stats` | `--group-id`, `--date-from`, `--date-to`, `--json` |
+Bump `__version__` in `sklik/__init__.py` → update README (version line + command tables), CLAUDE.md (command count/index), CHANGELOG.md (new `## [x.y.z] — YYYY-MM-DD` entry), bundled skill → run `python scripts/check_docs_consistency.py` (must pass) → commit → tag `vX.Y.Z`.
 
-### Placements (content network "umístění")
-Placement targeting of display groups = `patterns.*` namespace. Pattern is a URL string on a group: `"forbes.cz"`, `"www.e15.cz/byznys"`. No `patterns.list` — listing via report API. A group without placements serves network-wide.
-| Command | Key Flags |
-|---------|-----------|
-| `placements` | `--group-id`, `--json` |
-| `placement-create` | `--group-id`, `--pattern`, `--cpc` (CZK, optional override), `--status`, `--json` |
-| `placement-remove` | `--pattern-id`, `--confirm`, `--json` |
+## Documentation map
 
-### Combined (native) ads — kombinovaná reklama
-The display-network format that also serves native in-article placements on Seznam content sites. Listed by `ads` (`adType: combined`), stats via `ad-stats`, removal via `ad-remove`. No content update — remove + create.
-| Command | Key Flags |
-|---------|-----------|
-| `combined-create` | `--group-id`, `--short-line` (max 25), `--long-line` (max 90), `--description` (max 90), `--company-name` (max 25), `--final-url`, `--image-landscape` (1.91:1, min 600×314), `--image-square` (1:1, min 300×300), `--image-logo`, `--image-landscape-logo`, `--color-main`/`--color-accent` (hex), `--mobile-final-url`, `--tracking-template`, `--status`, `--json` |
-
-### Negative Keywords
-| Command | Key Flags |
-|---------|-----------|
-| `negatives` | `--group-id`, `--campaign-id`, `--json` |
-| `negative-add` | `--group-id`, `--name`, `--match-type negativeBroad/negativePhrase/negativeExact`, `--json` |
-| `negative-add-batch` | `--group-id`, `--keywords-json`, `--json` |
-| `negative-remove` | `--keyword-id`, `--confirm`, `--json` |
-
-### Keyword Research
-| Command | Key Flags |
-|---------|-----------|
-| `suggest` | `--query`, `--limit`, `--related`, `--order-by avgSearchCount/cpc/score`, `--json` |
-| `suggest-stats` | `--queries` (comma-separated), `--granularity monthly/daily`, `--json` |
-
-### Search Queries
-| Command | Key Flags |
-|---------|-----------|
-| `search-queries` | `--campaign-id`, `--group-id`, `--date-from`, `--date-to`, `--limit`, `--json` |
-
-### Sitelinks
-| Command | Key Flags |
-|---------|-----------|
-| `sitelinks` | `--json` |
-| `sitelink-create` | `--name`, `--url`, `--json` |
-| `sitelink-remove` | `--sitelink-id`, `--confirm`, `--json` |
-
-### Conversions (conversion-tracking definitions)
-A conversion = a named definition of a desired action (purchase, signup…) and its value. The CLI manages the definitions; measurement (pixel/SEM) lives on the website.
-| Command | Key Flags |
-|---------|-----------|
-| `conversions` | `--json` |
-| `conversion-types` | `--json` (type IDs in use; see SEM note) |
-| `conversion-create` | `--name`, `--type-id`, `--value` (CZK), `--color`, `--json` |
-| `conversion-update` | `--conversion-id`, `--name`, `--value`, `--color`, `--json` |
-| `conversion-remove` | `--conversion-id`, `--confirm`, `--json` |
-
-### Retargeting (audience lists)
-| Command | Key Flags |
-|---------|-----------|
-| `retargeting` | `--json` |
-| `retargeting-create` | `--name`, `--membership` (days), `--description`, `--use-historic`, `--take-all-users`, `--conditions-json`, `--json` |
-| `retargeting-update` | `--list-id`, `--name`, `--membership`, `--description`, `--json` |
-| `retargeting-remove` | `--list-id`, `--confirm`, `--json` |
-
-### Image Banners (context/display network — static jpg/png/gif, not HTML5)
-| Command | Key Flags |
-|---------|-----------|
-| `banner-formats` | `--json` (allowed dimensions + size limits) |
-| `banners` | `--group-id`, `--json` |
-| `banner-create` | `--group-id`, `--name`, `--clickthru-url`, `--image` (local path OR http URL), `--status`, `--json` |
-| `banner-remove` | `--banner-id`, `--confirm`, `--json` |
-
-## Safety Rules
-
-- All destructive operations (`*-remove`) require `--confirm` flag
-- Always use `--json` flag when parsing output programmatically
-- Default date range for stats is last 30 days
-
-## Batch Format Examples
-
-**keyword-create-batch:**
-```json
-[{"name": "kurz ai", "matchType": "phrase", "cpc": 15.0}, {"name": "ai školení", "matchType": "broad"}]
-```
-
-**negative-add-batch:**
-```json
-[{"name": "zdarma", "matchType": "negativeBroad"}, {"name": "free", "matchType": "negativeBroad"}]
-```
-Or simple array: `["zdarma", "free", "zadarmo"]` (defaults to negativeBroad).
-
-## API Notes
-
-- **Endpoint pinned to v5**: `https://api.sklik.cz/drak/json/v5` (not the unpinned `.../drak/json`, which silently follows the newest version and could break on a major bump).
-- Protocol: JSON-RPC POST to `https://api.sklik.cz/drak/json/v5/{method}`
-- Params sent as JSON array: `[userStruct, ...params]`
-- Reports are two-step: `createReport` (dates in restriction) → `readReport` (pagination + columns)
-- Campaign budget is nested as `budget.dayBudget` in list responses but flat `dayBudget` in create
-- Ad updates that change creative fields create a new ad (returns `newAdIds`)
-- Keyword `name` and `matchType` cannot be updated — must remove and recreate
-- **Filtering**: API does NOT support parent-entity filters (`campaign.ids`, `group.ids`, `status`) in `restrictionFilter`. Only `ids` (own entity IDs), `isDeleted`, and `dateFrom`/`dateTo` (for reports) work. All `--campaign-id`, `--group-id`, `--status` filters are applied client-side.
-- **Diagnostics**: Can be a dict `{"operation": {...}, "problems": [...]}` or a list of dicts — handle both formats
-- **Negative keywords**: Group-level via `keywords.negative.create` (requires `groupId`). Campaign-level via `campaigns.update` with `negativeKeywords` array (requires `type` field). CLI handles both via `--group-id` or `--campaign-id`.
-- **campaigns.update quirk**: `type` field is ALWAYS required in the update payload (for any field change, not just negativeKeywords). CLI auto-fetches it before updating.
-- **Targeting fields** (on campaign objects): `regions` (array of `{id,name}`), `devicesPriceRatio` (`{desktop,mobile,tablet,other}` as % modifiers), `schedule` (`{daySchedule:[{value:[24 hourly 0-100]}, …×7]}`, week starts Monday). Settable via `campaigns.create`/`update`.
-- **Conversions**: `conversions.list` takes ONLY the user struct (no restriction/displayColumns). Value in haléře. **SEM caveat**: accounts with Seznam Event Measurement activated cannot use `conversions.*` — CLI prints a friendly hint instead of crashing. `listConversionTypes` is currently broken server-side (HTTP 500), so `conversion-types` derives types from existing conversions instead.
-- **Retargeting**: list objects use `listId` (not `id`); create/update nest editable fields under `attributes` (`name`, `membership`, `useHistoricData`, `takeAllUsers`, `description`). `retargeting.lists.list` takes only the user struct.
-- **Banners**: `banners.create` takes the image bytes directly in `file` (base64 over JSON) — NOT an image-id; CLI base64-encodes a local path or downloads a URL. Required fields: `groupId`, `name`, `clickthruUrl`, `file`. List/return quirks: list columns use `bannerName`/`adStatus` (not `name`/`status`); `banners.create` returns `bannerIds` as `[{"id":…,"requestId":…}]` (CLI normalises to ints). Allowed formats via `images.constraints.list` (fixed sizes, ≤250 KB). The separate `images.*` namespace (URL + metadata, Sklik downloads) is NOT used.
-- **Combined (native) ads**: created via `ads.create` with `adType: combined`. Both `image` (landscape 1.91:1) and `imageSquare` (1:1) are REQUIRED; binary data is base64-encoded inline (same as banners), or pass `imageId`/`imageSquareId` referencing the `images.*` namespace (CLI uses inline data only). Optional `imageLogo` (1:1) / `imageLandscapeLogo` (4:1) — Sklik shows at most one logo, display not guaranteed. Colors (`colorMain`, `colorAccent`) are hex WITHOUT the leading `#` (CLI strips it). **Sklik silently strips forbidden characters from texts** (e.g. em dash "—" in `longLine`) — no warning, no error; verify final wording via `ads.list`. Combined fields (`shortLine`, `longLine`, `companyName`) are valid `ads.list` displayColumns and come back `null` for other ad types.
-- **Placements (patterns)**: `patterns.create` takes `[{groupId, pattern, cpc?, cpt?, status?}]`; returns `ids`. `pattern` = plain domain or URL path string (no wildcards needed: `"forbes.cz"`, `"www.e15.cz/byznys"`). There is NO `patterns.list` (404) — list via `patterns.createReport` + `readReport` with displayColumns `["id","pattern","status","cpc","group.id","group.name"]`. Negative placements = `patterns.negative.*` (not wrapped in CLI).
-- **Rate limits & item caps**: not fixed in the docs — they're account-specific and queryable at runtime via the `api.limits` method, which returns `minuteRequestLimit`, `dayRequestLimit`, `statsDataLimit`, and `batchCallLimits[]` (per-method `{name, limit}` = max items per batch call), plus value ranges (`CpcMin/Max`, `CpmMin/Max`, `dayBudgetMin/Max` in haléře), `bannerSizeKBMax`, `retargetingMembershipDurationMax`, and `valueAddedTax`. Exposed via the `api-limits` command (also shows live local usage).
-- **Local request budget (cross-session)**: `_api_call` tracks every request's timestamp in a per-account file `.rate_limit_<account>.json` (sibling to the session cache, git-ignored) and checks it BEFORE each call — so the budget is respected even across separate CLI runs and parallel sessions. Limits come from `api.limits` (cached ~1×/day); the CLI throttles at `RATE_LIMIT_SAFETY` (90%) of the stated values. **Minute ceiling → waits out the rolling 60 s window then proceeds** (capped at `RATE_LIMIT_MAX_WAIT`=180 s). **Day ceiling → hard stop (`sys.exit(1)`), never loops** — a runaway job can't keep hammering an account already at its daily limit. If `api.limits` can't be fetched, conservative fallbacks apply (`RATE_LIMIT_FALLBACK_MINUTE/DAY`). This is the primary defence against the real risk that excessive API traffic gets a (high-spend) account throttled or blocked — it does NOT depend on the model remembering to behave.
-- **Throttling status `429`** ("Too many requests. Has to wait."): the local budget should prevent this, but if Sklik still returns 429 (e.g. other tools sharing the same login), `_api_call` retries with linear back-off (5 s, 10 s, 15 s) and **gives up after 3 retries** (`sys.exit(1)`) — no infinite loop.
-- **Overflow status `413`** ("Too many items requested."): returned when a batch call exceeds that method's `batchCallLimits` entry (check via `api-limits`). NOT specially handled — surfaces as a generic error and exits; there is no client-side chunking, so split large `keyword-create-batch` / `negative-add-batch` payloads yourself (typically ≤100 items for create/update/remove; report/list allow up to 5000).
-- **Recommended account entity caps** (Sklik docs — exceeding causes account slowdown and can break bulk ops/imports/API): ≤250 campaigns, ≤250k keywords, ≤4000 negatives per group, ≤100 ads per group, ≤1000 groups per campaign, ≤1000 targeting entries per group. Batch ops are **all-or-nothing** (any item fails → whole batch rolled back). Prefer the cheaper `*.check` validation methods before data-changing calls.
-- **Other status codes** (from `stats.status`): `200` OK, `206` partial OK (warnings in `diagnostics`), `301` user is serviced, `400` bad arguments, `401` invalid session (CLI re-auths once), `403` access denied, `404` not found, `406` bad attribute values, `409` conflict, `500` server error.
+- **[README.md](README.md)** — full command reference, flags, worked examples.
+- **[docs/api-notes.md](docs/api-notes.md)** — how the DRAK API actually behaves (endpoints, report quirks, ad/banner/conversion/retargeting specifics, rate limits, status codes).
+- **[CHANGELOG.md](CHANGELOG.md)** — version history.
+- **`skill/sklik-ppc/`** — the bundled Claude Code skill (`/sklik-ppc`): strategy, campaign structure, display rules.

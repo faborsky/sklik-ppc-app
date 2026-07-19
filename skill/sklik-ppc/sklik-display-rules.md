@@ -9,14 +9,19 @@ Reference for managing display (content network) and remarketing campaigns with 
 - Bidding: **CPT** (cost per thousand impressions) or CPC
 - Good for: brand awareness, broad reach, product visibility
 - Typical daily budget: 50–300 Kč
-- Group `maxCpt` sets the CPT bid (in haléře via API, CZK in CLI)
+- CPT bidding (`maxCpt`) is set in the **Sklik web UI only** — the CLI exposes just `--cpc` on groups
 
 ### Remarketing
 - Target users who already visited your site
-- Requires a remarketing audience set up in Sklik admin
+- Full flow is CLI-only: `retargeting-create` (audience) → `retargeting-attach --list-id L --group-id X` → verify with `retargeting-attached`
 - Higher CTR expected (0.3%+) due to a warmer audience
 - Typical daily budget: 30–150 Kč
 - Usually CPC bidding
+
+### Other display targeting (all attach to the GROUP)
+- **Placements**: `placement-create` (target specific websites) / `placement-exclude` (ban websites — the API won't list excluded pattern texts back, note them down)
+- **Interests / themes / intents**: `targeting-add` / `targeting-exclude` with `--type interest/theme/intend`; category catalog via `targeting-categories`
+- Combine: e.g. theme targeting + excluded placements + frequency cap (`group-update --max-daily-impression`)
 
 ## Placement Targeting (Umístění) — patterns.* API
 
@@ -41,7 +46,7 @@ The display-network ad type that also serves as **native advertising inside arti
 ### API support (full, via `ads.*`)
 - `ads.create` with `adType: combined` — CLI command `combined-create`
 - Listed by `ads.list` (CLI `ads`), stats via the ads report (CLI `ad-stats`, `adType: combined`)
-- No content update — remove + create (same as ETA)
+- No content-update command for combined ads. To change one: **create the new ad first (`combined-create`), verify, then `ad-remove` the old** — create-first ordering so a failed create never drops the ad. (Text-only eta ads have a safe one-shot `ad-replace`; combined does not, because of the images.)
 
 ### Required assets
 | Field | Limit |
@@ -96,15 +101,11 @@ Image banners (JPG, PNG, GIF):
 ### Workflow for HTML5 Banner Management
 1. **Analyze**: Use the API (`banners` list for image banners + `ad-stats --group-id` for performance — the ads report includes both `adType: banner` and `adType: html5_banner`). HTML5 banners are visible in stats but cannot be created/edited via API.
 2. **Plan**: Use the CLI to understand campaign/group structure, then plan HTML5 uploads
-3. **Create/Replace**: Must be done via the Sklik web interface
-4. **Remove**: HTML5 banner IDs are not available via API; removal is also via the web interface
-5. **Stats**: HTML5 banner stats are only visible in the Sklik web interface
+3. **Create/Replace/Remove**: Must be done via the Sklik web interface (the API cannot create, edit, or remove HTML5 banners)
+4. **Stats**: via `ad-stats` (rows with `adType: html5_banner`) — see step 1
 
-### Restriction Filters
-Unlike `ads.*`, `banners.list` and `banners.createReport` DO support:
-- `campaign.ids` — filter by campaign
-- `group.ids` — filter by group
-- `banner.dimensions` — filter by WxH
+### Filtering banner lists
+Like the rest of the API, `banners.list` ignores parent-entity restrictions — the CLI filters **client-side**: use `banners --group-id X --json`. To filter by size/campaign, parse the `--json` output yourself (each banner row carries its dimensions and group).
 
 ## Creative Theme Concept
 
@@ -164,7 +165,7 @@ Campaign: "{project} - Remarketing" (type: context)
 
 This skill **uploads** image banners and reports on all banners (image + HTML5), but it does not design them.
 
-- **Image banners** (JPG/PNG/GIF): upload with `banner-create --image <path|url>` (loop per file; replace = `banner-remove` + `banner-create`).
+- **Image banners** (JPG/PNG/GIF): upload with `banner-create --image <path|url>` (loop per file; replace = `banner-create` new **then** `banner-remove` old — create-first; download live creatives first with `banner-download --group-id X --out DIR`).
 - **HTML5 banners** (ZIP): generate with whatever tool you prefer (a banner builder, a design tool, an HTML/CSS export), keep each ZIP ≤150 KB, then **upload via the Sklik web UI** — the API cannot create HTML5 banners.
 
 Follow the naming convention above so the review/replace scenarios can group them by theme.

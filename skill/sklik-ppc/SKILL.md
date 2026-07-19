@@ -33,28 +33,32 @@ The app reads tokens from environment variables in the app's `.env` file. You do
 - **`--account` vs `--user-id`**: `--account` switches the **login / token**; `--user-id` targets a **managed account UNDER** the active login (e.g. an agency login reaching a client account). Both flags go BEFORE the subcommand.
 - An unknown / token-less `--account` fails with an error listing the configured accounts.
 
-**Exception**: `suggest` and `suggest-stats` do NOT support `--user-id` (keyword research is account-agnostic) — always call them without `--user-id`. They still accept `--account`.
+**Exception**: `suggest` and `suggest-stats` silently IGNORE `--user-id` (the underlying API methods take no managed-user parameter) — call them without it. They still accept `--account`.
 
 ### Command map (what the CLI actually exposes)
 
 Use these exact commands:
 
-- **Account**: `account`, `api-limits` (rate/batch/value limits + live local request-budget usage)
+- **Account**: `account`, `api-limits` (rate/batch/value limits + live local request-budget usage), `credit` (wallet balance CZK), `regions` (region-ID catalog for `--regions`), `autotagging` / `autotagging-update` (UTM config)
 - **Pulse**: `pulse` — **account-wide overview in ONE call** (totals + per-campaign + deltas vs the previous equal-length period + top movers). Flags: `--days N` (default 7), `--date-from`/`--date-to`, `--no-compare`, `--json`. **Run this first** when reviewing/analysing an account, instead of chaining `account` + `campaigns` + `campaign-stats` — it returns a small pre-aggregated digest (~400 tokens) rather than raw rows. Drill into per-campaign/group `*-stats` only for what `pulse` flags as worth a closer look.
-- **Campaigns**: `campaigns`, `campaign-create`, `campaign-update`, `campaign-remove`, `campaign-stats`, `campaign-targeting`
-  - Targeting flags on create/update: `--regions` (CSV region IDs), `--device-bids desktop:mobile:tablet:other` (%), `--schedule-json` (update only)
-- **Groups**: `groups`, `group-create`, `group-update`, `group-remove`, `group-stats`
-- **Keywords**: `keywords`, `keyword-create`, `keyword-create-batch`, `keyword-update`, `keyword-remove`, `keyword-stats`
-- **Ads (ETA)**: `ads`, `ad-create`, `ad-update`, `ad-remove`, `ad-stats`
-- **Combined (native) ads**: `combined-create` — kombinovaná reklama for the display network (incl. native in-article placements). List via `ads` (`adType: combined`), stats via `ad-stats`, remove via `ad-remove`. No update — remove + create.
-- **Negatives**: `negatives`, `negative-add`, `negative-add-batch`, `negative-remove`
+- **Campaigns**: `campaigns`, `campaign-create`, `campaign-update`, `campaign-remove`, `campaign-restore` (undelete), `campaign-stats`, `campaign-targeting`
+  - Targeting flags on create/update: `--regions` (CSV region IDs), `--device-bids desktop:mobile:tablet:other` (%), `--schedule-json` (update only), `--ad-selection {weighted,random,cpa,cos}` (ad rotation — `random` = even split for a clean creative A/B test)
+- **Groups**: `groups`, `group-create`, `group-update`, `group-remove`, `group-restore`, `group-stats`
+  - `--max-daily-impression N` on create/update = frequency cap (max impressions per user per day)
+- **Keywords**: `keywords` (filter `--group-id`/`--campaign-id`), `keyword-create`, `keyword-create-batch`, `keyword-update`, `keyword-remove`, `keyword-restore`, `keyword-stats`, **`keyword-set`** (declarative upsert of a group's keywords; `--remove-others` = full sync to the given list — powerful, present the diff first)
+- **Ads (ETA)**: `ads` (filter `--group-id`/`--campaign-id`), `ad-create`, `ad-update` (status only), **`ad-replace`** (safe atomic text change — see Ad text updates), `ad-remove`, `ad-restore`, `ad-stats`
+- **Combined (native) ads**: `combined-create` — kombinovaná reklama for the display network (incl. native in-article placements). List via `ads` (`adType: combined`), stats via `ad-stats`, remove via `ad-remove`. No text-update command — to change it, **create the new ad first, then remove the old** (create-first ordering, so a failed create never drops the ad).
+- **Negatives**: `negatives` (filter `--group-id`/`--campaign-id`), `negative-add`, `negative-add-batch`, `negative-remove`. Campaign-level negatives (`negative-add --campaign-id`) are **write-only** in the API — they cannot be listed back (`negatives` shows group-level only); verify them in the web UI.
 - **Research**: `suggest`, `suggest-stats`, `search-queries`
-- **Sitelinks**: `sitelinks`, `sitelink-create`, `sitelink-remove`
+- **Sitelinks**: `sitelinks`, `sitelink-create`, `sitelink-update` (renaming creates a NEW ID — the CLI reports it), `sitelink-remove`, **`sitelink-assign`** (`--campaign-id` or `--group-id` + `--sitelink-ids "1,2,3"` — REPLACES the whole set; `""` clears), `sitelinks-assigned`
 - **Conversions** (measurement defs): `conversions`, `conversion-types`, `conversion-create`, `conversion-update`, `conversion-remove`
-- **Retargeting** (audiences): `retargeting`, `retargeting-create`, `retargeting-update`, `retargeting-remove`
+- **Retargeting** (audiences): `retargeting`, `retargeting-create`, `retargeting-update`, `retargeting-remove`, **`retargeting-attach`/`retargeting-detach`** (`--list-id --group-id`; attach audience to a display group as targeting), `retargeting-attached` (what's attached where), **`retargeting-exclude`** (`--list-id` + `--campaign-id` or `--group-id` — exclude an audience, e.g. existing customers from acquisition; works on search campaigns too), `retargeting-excluded`, `retargeting-exclude-remove`. Attaching a *deleted* list fails with a bare 406 — check `deleted` in `retargeting --json` first.
 - **Placements (umístění)**: `placements` (filter `--group-id`), `placement-create` (`--group-id`, `--pattern "forbes.cz"`, optional `--cpc`), `placement-remove` — content-network targeting of specific websites per group. Pattern = domain or URL path (`"mediar.cz"`, `"www.e15.cz/byznys"`).
-- **Image banners**: `banner-formats`, `banners` (filter `--group-id`), `banner-create` (`--image` = local path OR URL), `banner-remove`
-  - No batch/replace/update/stats command. Batch = loop `banner-create`; replace = `banner-remove` old + `banner-create` new; **banner stats come from `ad-stats`** (banners appear in the ads report as `adType: banner`).
+- **Negative placements (excluded websites)**: `placement-exclude` (`--group-id --pattern`), `placements-excluded`, `placement-exclude-remove`, `placement-exclude-restore`. Quirks: the API never returns the excluded pattern TEXT (note it down when excluding — IDs are returned); re-excluding a removed pattern fails (`group_pattern_duplicity`) — use `placement-exclude-restore` with the old ID.
+- **Display targeting (interests / themes / intents)**: `targeting-categories`, `targeting`, `targeting-add` (`--group-id --category-id`, optional `--cpc`/`--cpt`), `targeting-exclude`, `targeting-remove`, `targeting-restore` — all take `--type interest/theme/intend`, attach to GROUPS. Removal is soft: re-adding the same category → 409, use `targeting-restore`.
+- **Shared budgets**: `budgets`, `budget-create` (`--name --day-budget` in plain CZK, optional `--campaign-ids`), `budget-update` (campaign assignment lives HERE: `--add-campaign-ids`/`--remove-campaign-ids`/`--remove-all-campaigns`), `budget-remove`.
+- **Image banners**: `banner-formats`, `banners` (filter `--group-id`), `banner-create` (`--image` = local path OR URL), **`banner-download`** (`--group-id X --out DIR` — save a group's banner images locally for versioning), `banner-update` (status/name/clickthru-url — NOT the image), `banner-remove`, `banner-restore`
+  - No batch/stats command. Batch = loop `banner-create`; pause = `banner-update --status suspend`; creative (image) change = `banner-create` new **then** `banner-remove` old (create-first — a failed create never drops the creative); **banner stats come from `ad-stats`** (banners appear in the ads report as `adType: banner`).
 
 ## SAFETY RULES
 
@@ -72,7 +76,7 @@ Sklik enforces a **per-account request budget** and rejects excess traffic with 
 - **The CLI already protects you.** Every call is counted in a per-account local file (`.rate_limit_<account>.json`) that persists **across sessions and parallel runs**, and is checked *before* each request: at 90 % of the minute limit it waits out the rolling 60 s window; at the daily limit it **refuses and exits** rather than hammering on. You don't manage the counter — but **don't try to defeat it** (no parallel fan-out of hundreds of write calls, no tight retry loops).
 - **Work in modest, sequential batches.** Use the `*-batch` commands instead of looping single creates, but keep each batch within the method's `batchCallLimits` (typically **≤100 items** for create/update/remove; list/report allow up to **5000**). Over the cap you get status `413` — split the payload yourself; there is no auto-chunking. Run batches one after another, not in parallel.
 - **Reports return ≤5000 rows** (`statsDataLimit`). For bigger pulls, narrow the date range or paginate — don't request everything at once.
-- **Prefer cheap reads.** Use `pulse` for account overviews (one pre-aggregated call) instead of chaining `account` + `campaigns` + many `*-stats`. Validation (`*.check`) is cheaper than data-changing calls.
+- **Prefer cheap reads.** Use `pulse` for account overviews (one pre-aggregated call) instead of chaining `account` + `campaigns` + many `*-stats`. Drill into per-entity `*-stats` only for the 2–3 items `pulse` flags as worth a closer look.
 - **Batch writes are all-or-nothing** — if any item in a batch fails, Sklik rolls back the whole batch. Fix the offending item and resend.
 - **Don't overfill the account** (Sklik's recommended caps — exceeding them slows the account and can break bulk ops/imports/API): ≤250 campaigns, ≤250k keywords, ≤4000 negatives/group, ≤100 ads/group, ≤1000 groups/campaign, ≤1000 targeting entries/group.
 
@@ -80,19 +84,19 @@ Sklik enforces a **per-account request budget** and rejects excess traffic with 
 
 ## Sklik API Gotchas
 
-### Ad text updates
-- **`ad-update` only changes status** (active/suspend), NOT ad content
-- To change ad text: **remove old ad → create new ad** (suspend alone is not enough)
-- **Duplicate detection (`ad_duplicate_in_db`)**: Sklik rejects ads too similar to existing ones — even suspended or recently removed ads. When replacing an ad, change at least 2 fields (e.g. headline + description) to avoid the duplicate error. A single-field change often triggers the duplicate check.
-- **Workflow for bulk ad text updates**:
-  1. Remove all old ads first (`ad-remove --confirm`)
-  2. Create new ads one by one (sequentially, NOT in parallel) — if one fails with a duplicate error, adjust the text and retry
-  3. Minimal text tweaks that help: reword the description slightly, reorder phrases
+### Ad text updates — use `ad-replace`, NEVER manual remove+create
+- **`ad-update` only changes status** (active/suspend), in place, no new ID.
+- **To change a text (eta) ad's copy, use `ad-replace`.** Sklik can't edit ad text in place: any creative change makes `ads.update` **atomically delete the old ad and create the new one in ONE server-side operation** (the new ID is returned as `newAdIds`). Because it's one atomic op, a validation failure leaves the **original ad untouched**.
+  - `ad-replace --ad-id X --description1 "…"` — fetches the current ad, applies only the fields you pass (so fixing one number keeps the rest), pre-validates with `ads.check`, then does the atomic swap. Pass any of `--headline1/2/3`, `--description`/`--description2`, `--final-url`, `--path1/2`.
+- **🔴 NEVER change ad text by hand with `ad-remove` + `ad-create`.** That is two separate calls: if the `ad-create` fails (typically `ad_duplicate_in_db`), the `ad-remove` already ran and the group **silently loses the ad**. This really happened in production (a group dropped to 1 ad). `ad-replace` exists specifically to make that impossible.
+- **Duplicate detection (`ad_duplicate_in_db`)**: Sklik rejects an ad that is too similar to a *different* existing ad. With `ad-replace` the atomic swap means the new copy is **not** compared against the ad it replaces, so a one-field fix is fine. If `ad_duplicate_in_db` still fires, the new text genuinely collides with another live ad — the original is preserved; adjust the wording and retry. (Do NOT auto-mutate the copy silently — surface it to the user.)
+- **Bulk ad text updates**: run `ad-replace` per ad, sequentially (not parallel). Each one is self-contained and safe.
 
 ### Banner create / replace
 - **`banner-create --image <path|url>`** uploads ONE image banner. `--image` accepts a local file OR a public URL; the CLI loads the bytes and base64-encodes them (no manual encoding, no separate image step).
 - Required: `--group-id`, `--name`, `--clickthru-url`, `--image`. Optional: `--status active/suspend`.
-- **There is no banner-update / banner-replace / banner-create-batch.** To replace a banner: `banner-remove --banner-id X --confirm` then `banner-create ...`. To upload many: loop `banner-create` (sequentially).
+- **There is no banner-update / banner-replace / banner-create-batch.** To replace a banner, **create the new one first, then remove the old** (`banner-create ...` → verify → `banner-remove --banner-id X --confirm`). Create-first so a failed create never leaves the group without the creative. To upload many: loop `banner-create` (sequentially).
+- **`banner-download --group-id X --out DIR`** saves a group's current banner images to disk (reads `image.url`) — use it to version live creatives back into a repo before replacing them.
 - Allowed formats/sizes: `banner-formats` (fixed dimensions e.g. 300×300, 728×90; ≤250 KB). Match the image to an allowed size before upload.
 
 ### Combined (native) ads — kombinovaná reklama
@@ -100,7 +104,7 @@ Sklik enforces a **per-account request budget** and rejects excess traffic with 
 - Create with `combined-create`. Required: `--group-id` (display/context group), `--short-line` (max 25 chars), `--long-line` (max 90), `--description` (max 90), `--company-name` (max 25), `--final-url`, `--image-landscape` (1.91:1, min 600×314, recommended 1200×628), `--image-square` (1:1, min 300×300, recommended 1200×1200). Optional: `--image-logo` (1:1, min 128×128), `--image-landscape-logo` (4:1, min 512×128), `--color-main`/`--color-accent` (hex), `--mobile-final-url`, `--tracking-template`, `--status`.
 - Images: local path OR URL (jpg/png/gif, max 1 MB each), same loading as `banner-create --image`.
 - **Sklik silently strips forbidden characters from texts** — e.g. an em dash "—" in longLine is removed without a warning. Verify the final wording with `ads --group-id X --json` after creation.
-- Like ETA: `ad-update` only changes status; to change texts/images, `ad-remove` + `combined-create`. Stats via `ad-stats` (`adType: combined`).
+- `ad-update` only changes status. There is no `ad-replace` for combined ads (it's text-only); to change a combined ad's texts/images, **create the new one first (`combined-create`), verify it, then `ad-remove` the old** — create-first ordering so a failed create never drops the ad. Stats via `ad-stats` (`adType: combined`).
 - Uppercase warnings (`consecutive_two_and_more_uppercase`) apply here too — usually safe to ignore for brand abbreviations.
 
 ### HTML5 vs Image banners — IMPORTANT
@@ -301,10 +305,9 @@ Typical things to look for (decide your own thresholds):
 After approval, execute changes via the CLI.
 
 **For ad text updates** (price changes, copy updates):
-1. Remove old ads first: `ad-remove --ad-id X --confirm`
-2. Create new ads sequentially (one at a time, not parallel) with updated text
-3. If `ad_duplicate_in_db` error: adjust wording slightly and retry
-4. Verify final state: `ads --group-id X --json`
+1. Use `ad-replace --ad-id X <changed fields> --json` per ad, sequentially (one at a time, not parallel). It swaps the ad atomically (old removed + new created in one op) — the original survives any failure. **Never** hand-run `ad-remove` then `ad-create`.
+2. If `ad_duplicate_in_db` error: the new copy collides with a *different* live ad (the original is untouched) — adjust wording and retry, or surface to the user.
+3. Verify final state: `ads --group-id X --json` (note the new ad IDs)
 
 Report all changes made.
 
@@ -348,7 +351,7 @@ Show a table grouping banners by theme, with sizes present, missing sizes, landi
 
 ## Scenario 4: REPLACE-BANNERS — Bulk Banner Replacement
 
-> There is no `banner-replace` / `banner-create-batch` command. "Replace" = remove the old banner + create the new one. Do it as an explicit, plan-first loop.
+> There is no `banner-replace` / `banner-create-batch` command. "Replace" = **create the new banner first, verify it, then remove the old one** (create-first — a failed create must never leave the group without the creative). Do it as an explicit, plan-first loop.
 
 ### Phase 0 — Context + Discovery
 
@@ -369,20 +372,23 @@ Build the mapping yourself: parse existing banners' names/sizes (from `banners -
 Show the replacement plan clearly:
 ```
 Replacement plan (group "Social Proof", group-id 12345):
-  remove #67890 (300x250)  +  create from social-proof_300x250.png
-  remove #67891 (300x300)  +  create from social-proof_300x300.png
+  create from social-proof_300x250.png  →  then remove #67890 (300x250)
+  create from social-proof_300x300.png  →  then remove #67891 (300x300)
   ...
 ```
 
 **WAIT for user approval.**
 
-### Phase 3 — Execute (per banner, sequentially)
+### Phase 3 — Execute (per banner, sequentially — create-first)
 
 ```bash
-<SKLIK_APP_DIR>/run.sh banner-remove --banner-id 67890 --confirm --json
 <SKLIK_APP_DIR>/run.sh banner-create --group-id 12345 --name "social-proof 300x250" \
   --clickthru-url "https://..." --image [path]/social-proof_300x250.png --json
+# only after the create succeeded:
+<SKLIK_APP_DIR>/run.sh banner-remove --banner-id 67890 --confirm --json
 ```
+
+If a `banner-create` fails, STOP — keep the old banner in place, report the error to the user.
 
 Verify: `<SKLIK_APP_DIR>/run.sh banners --group-id 12345 --json`
 
@@ -399,13 +405,14 @@ Verify: `<SKLIK_APP_DIR>/run.sh banners --group-id 12345 --json`
 ### Phase 1 — Strategy
 
 Ask the user which display strategy:
-- **Content Network** — broad reach on Seznam partner sites, CPT bidding
+- **Content Network** — broad reach on Seznam partner sites (CPT bidding exists only in the web UI; the CLI sets `--cpc`)
 - **Remarketing** — retarget site visitors, CPC bidding
-- **Specific Placements** — target specific websites/categories
+- **Specific Placements** — target specific websites (`placement-create`)
+- **Interest / theme / intent targeting** — category targeting via `targeting-add --type interest/theme/intend` (browse options with `targeting-categories`)
 
-For **remarketing**, check existing audiences and create one if needed:
+For **remarketing**, check existing audiences, create one if needed, and later (Phase 3) attach it to the group — the full flow is CLI-only now:
 ```bash
-<SKLIK_APP_DIR>/run.sh retargeting --json
+<SKLIK_APP_DIR>/run.sh retargeting --json          # check `deleted` — a deleted list cannot be attached
 <SKLIK_APP_DIR>/run.sh retargeting-create --name "Visitors 30d" --membership 30 --use-historic --json
 ```
 
@@ -415,7 +422,7 @@ For **remarketing**, check existing audiences and create one if needed:
 Campaign: "{project} - Remarketing" — type: context
   Day budget: [X] Kč
 
-  Group: "{theme}" — CPT: [X] Kč
+  Group: "{theme}" — CPC: [X] Kč
     Banners: [list sizes from dir]
     Click URL: [landing page]
 ```
@@ -444,11 +451,17 @@ Campaign: "{project} - Remarketing" — type: context
   --image-landscape [path]/landscape_1200x628.jpg \
   --image-square [path]/square_1200x1200.jpg --json
 
-# 5. Placement targeting — restrict the group to specific websites
+# 5. Targeting — pick per strategy:
+#    a) specific websites:
 <SKLIK_APP_DIR>/run.sh placement-create --group-id X --pattern "example.cz" --json
 # verify: <SKLIK_APP_DIR>/run.sh placements --group-id X --json
+#    b) remarketing — attach the audience to the group:
+<SKLIK_APP_DIR>/run.sh retargeting-attach --list-id L --group-id X --json
+# verify: <SKLIK_APP_DIR>/run.sh retargeting-attached --group-id X --json
+#    c) interest/theme/intent categories:
+<SKLIK_APP_DIR>/run.sh targeting-add --type theme --group-id X --category-id 102 --json
 
-# 6. Optional targeting on the campaign (device bids / regions)
+# 6. Optional targeting on the campaign (device bids / regions — IDs via `regions`)
 <SKLIK_APP_DIR>/run.sh campaign-update --campaign-id X --device-bids 0:-20:-20:-100 --json
 ```
 
@@ -486,12 +499,16 @@ Top performers (keep/scale), underperformers (pause/replace), missing sizes, cre
 
 ### Phase 3 — Execute
 
-- Remove underperformers: `banner-remove --banner-id X --confirm` (there is no banner pause/update — remove, or pause the whole group/campaign via `group-update`/`campaign-update --status suspend`)
+- Pause underperforming banners: `banner-update --banner-id X --status suspend` (or `banner-remove --confirm`; removed ones can be brought back with `banner-restore`)
+- Exclude bad-performing websites: `placement-exclude --group-id X --pattern "web.cz"` (record the returned ID — the API can't list pattern texts back); exclude whole categories: `targeting-exclude --type theme --group-id X --category-id N`
+- Adjust audience targeting: `retargeting-attached` → `retargeting-attach`/`retargeting-detach`
 - Adjust bids: `group-update --group-id X --cpc Y`
 - Device/region bid modifiers: `campaign-update --campaign-id X --device-bids 0:-30:-30:-100`
+- Pool budgets across campaigns: `budget-create --name "..." --day-budget N --campaign-ids "A,B"` (shared budget)
+- Archive current creatives before changing them: `banner-download --group-id X --out DIR`
 - Upload new banners: loop `banner-create --image ...` (one per file)
-- Replace old creatives: `banner-remove` old + `banner-create` new (see Scenario 4)
-- Combined (native) ads: pause via `ad-update --status suspend`; text/image change = `ad-remove` + `combined-create`. If a display group has only banners, suggest adding a combined ad — it unlocks native in-article placements.
+- Replace old creatives: `banner-create` new **then** `banner-remove` old (create-first; see Scenario 4)
+- Combined (native) ads: pause via `ad-update --status suspend`; text/image change = `combined-create` new **then** `ad-remove` old (create-first). If a display group has only banners, suggest adding a combined ad — it unlocks native in-article placements.
 - Adjust budgets: `campaign-update`
 
 ---
