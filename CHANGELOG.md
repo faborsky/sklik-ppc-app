@@ -2,6 +2,22 @@
 
 Verze aplikace je v `sklik/__init__.py` (`__version__`, SemVer). Formát vychází z [Keep a Changelog](https://keepachangelog.com/). Datum je vydání dané verze.
 
+## [1.7.0] — 2026-07-19 — Vizuální podpis + čitelný help 🎨
+
+- **ASCII banner s barvami** („SKLIK" v seznamácké červené + verze a tagline) —
+  vypíše se **jen člověku v terminálu** (stdout je TTY a neběží `--json`).
+  Pipe, skripty a agentní tool-cally dostávají dál čistý výstup bez jediného
+  znaku navíc. Respektuje `NO_COLOR`.
+- **Seskupený `--help`**: místo jednoho plochého seznamu 88 příkazů přehled
+  po doménách (Účet, Kampaně, Sestavy, Klíčová slova, Inzeráty, Výzkum,
+  Sitelinky, Konverze, Retargeting, Bannery, Umístění, Cílení obsahovky,
+  Rozpočty). Seznam se generuje ze skutečně registrovaných subparserů —
+  nemůže se rozjet s realitou; nezařazený příkaz spadne viditelně do
+  „Ostatní".
+- **Doplněný chybějící soubor LICENSE (MIT)** — README licenci deklarovalo
+  už dřív, ale bez souboru v repu nebyla právně platná (veřejné repo bez
+  licence = všechna práva vyhrazena).
+
 ## [1.6.0] — 2026-07-19 — Kompletní pokrytí obsahovky + záchranná brzda 🚀
 
 Největší rozšíření od začátku: 34 nových příkazů (54 → 88), postavené podle gap analýzy oficiální DRAK dokumentace. Všechno otestované živě na sandbox kampani (vytvořena → proklikána → smazána).

@@ -8,7 +8,7 @@ Pokrývá kompletní životní cyklus *search* i *obsahových* kampaní — kamp
 
 ## 🆕 Co je nového
 
-Poslední verze **1.6.0** — retargeting publika na sestavy přes API (`retargeting-attach`), vylučující umístění, cílení na zájmy/témata/úmysly, přiřazování sitelinků, sdílené rozpočty, `*-restore` (undelete), `keyword-set`, kredit + validita statistik v `pulse`. Celá historie: **[CHANGELOG.md](CHANGELOG.md)**.
+Poslední verze **1.7.0** — vizuální podpis (ASCII banner jen pro lidi v terminálu) a seskupený `--help` (88 příkazů po doménách místo jednoho nečitelného seznamu). Celá historie: **[CHANGELOG.md](CHANGELOG.md)**.
 
 ## Dva způsoby, jak appku používat
 
@@ -442,5 +442,5 @@ Lekce ukazuje, jak vibe coding zapojit do **každodenní marketingové práce**:
 
 ## Licence
 
-MIT
+MIT — viz [LICENSE](LICENSE).
 

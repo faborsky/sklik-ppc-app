@@ -2,6 +2,8 @@
 from __future__ import annotations
 
 import argparse
+import os
+import sys
 
 import sklik.api as api
 from sklik import __version__
@@ -61,12 +63,118 @@ from sklik.commands.budgets import (
 
 
 # ---------------------------------------------------------------------------
+# Visual signature — humans only. Printed ONLY when stdout is a TTY and the
+# run isn't --json, so pipes, scripts and agent tool-calls always get clean,
+# token-free output.
+# ---------------------------------------------------------------------------
+
+_ART = [
+    "███████╗ ██╗  ██╗ ██╗      ██╗ ██╗  ██╗",
+    "██╔════╝ ██║ ██╔╝ ██║      ██║ ██║ ██╔╝",
+    "███████╗ █████╔╝  ██║      ██║ █████╔╝ ",
+    "╚════██║ ██╔═██╗  ██║      ██║ ██╔═██╗ ",
+    "███████║ ██║  ██╗ ███████╗ ██║ ██║  ██╗",
+    "╚══════╝ ╚═╝  ╚═╝ ╚══════╝ ╚═╝ ╚═╝  ╚═╝",
+]
+
+
+def _colors() -> tuple[str, str, str, str]:
+    """(red, bold, dim, reset) — empty strings when colors are off."""
+    if not sys.stdout.isatty() or "NO_COLOR" in os.environ:
+        return "", "", "", ""
+    return "\033[38;5;196m", "\033[1m", "\033[2m", "\033[0m"   # Seznam red
+
+
+def _print_banner() -> None:
+    if not sys.stdout.isatty() or "--json" in sys.argv:
+        return
+    red, bold, dim, reset = _colors()
+    info = [
+        "",
+        f"{bold}Sklik DRAK CLI{reset} v{__version__}",
+        f"{dim}PPC kampaně na Skliku — search & display{reset}",
+        f"{dim}./run.sh <příkaz> --help · dokumentace: README.md{reset}",
+        f"{dim}by Jindřich Fáborský · AIFirst.cz{reset}",
+        "",
+    ]
+    for art_line, info_line in zip(_ART, info):
+        print(f"{red}{art_line}{reset}   {info_line}")
+    print()
+
+
+# Grouped --help: the flat argparse listing of ~90 commands is unreadable.
+# Groups are matched by name prefix, first match wins (order matters:
+# "retargeting" before "targeting"). Anything unmatched lands in "Ostatní"
+# so no command can silently disappear from the help.
+_GROUPS: list[tuple[str, tuple[str, ...]]] = [
+    ("Účet & přehled", ("account", "api-limits", "pulse", "credit", "regions", "autotagging")),
+    ("Kampaně", ("campaign",)),
+    ("Sestavy", ("group",)),
+    ("Klíčová slova & negativa", ("keyword", "negative")),
+    ("Inzeráty (search)", ("ad", "combined-create")),
+    ("Výzkum", ("suggest", "search-queries")),
+    ("Sitelinky", ("sitelink",)),
+    ("Konverze", ("conversion",)),
+    ("Retargeting", ("retargeting",)),
+    ("Bannery (display)", ("banner",)),
+    ("Umístění (display)", ("placement",)),
+    ("Cílení obsahovky", ("targeting",)),
+    ("Rozpočty", ("budget",)),
+]
+
+
+def _build_epilog(subparsers) -> str:
+    """Grouped command overview, generated from the registered subparsers —
+    can never drift from the real command set."""
+    red, bold, _dim, reset = _colors()
+    helps = {a.dest: (a.help or "") for a in subparsers._choices_actions}
+    buckets: dict[str, list[str]] = {title: [] for title, _ in _GROUPS}
+    other: list[str] = []
+    for name in subparsers.choices:
+        for title, prefixes in _GROUPS:
+            if any(name == p or name.startswith(p) for p in prefixes):
+                buckets[title].append(name)
+                break
+        else:
+            other.append(name)
+
+    lines = [f"{bold}Příkazy ({len(subparsers.choices)}):{reset}"]
+    for title, _prefixes in _GROUPS:
+        if not buckets[title]:
+            continue
+        lines.append("")
+        lines.append(f"{red}{bold}{title}{reset}")
+        for name in buckets[title]:
+            help_text = helps.get(name, "")
+            if len(help_text) > 72:
+                help_text = help_text[:71] + "…"
+            lines.append(f"  {name:<28} {help_text}")
+    if other:
+        lines.append("")
+        lines.append(f"{red}{bold}Ostatní{reset}")
+        lines.extend(f"  {n:<28} {helps.get(n, '')}" for n in other)
+    lines += ["", "Detail příkazu: ./run.sh <příkaz> --help"]
+    return "\n".join(lines)
+
+
+class _GroupedHelpFormatter(argparse.RawDescriptionHelpFormatter):
+    """Skip argparse's flat subcommand listing — the grouped epilog covers it."""
+
+    def _format_action(self, action):
+        if isinstance(action, argparse._SubParsersAction):
+            return ""
+        return super()._format_action(action)
+
+
+# ---------------------------------------------------------------------------
 # CLI setup
 # ---------------------------------------------------------------------------
 
 def main() -> None:
+    _print_banner()
     parser = argparse.ArgumentParser(
         description="Sklik DRAK CLI — manage PPC search campaigns.",
+        formatter_class=_GroupedHelpFormatter,
     )
     parser.add_argument("--version", action="version",
                         version=f"%(prog)s {__version__}")
@@ -78,7 +186,7 @@ def main() -> None:
              f"SKLIK_API_TOKEN_<NAME>. Default: {api.DEFAULT_ACCOUNT}",
     )
     parser.add_argument("--user-id", type=int, default=None, help="Managed account user ID")
-    subparsers = parser.add_subparsers(dest="command", required=True)
+    subparsers = parser.add_subparsers(dest="command", required=True, metavar="<příkaz>")
 
     json_kwargs: dict = {"action": "store_true", "help": "Output as JSON"}
 
@@ -753,6 +861,7 @@ def main() -> None:
     p.add_argument("--config-json", help="Partial config as JSON, merged over current")
     p.add_argument("--json", **json_kwargs)
 
+    parser.epilog = _build_epilog(subparsers)
     args = parser.parse_args()
     api.set_json_output(getattr(args, "json", False))
     api.set_account(getattr(args, "account", api.DEFAULT_ACCOUNT))
