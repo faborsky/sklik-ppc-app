@@ -2,6 +2,16 @@
 
 Verze aplikace je v `sklik/__init__.py` (`__version__`, SemVer). Formát vychází z [Keep a Changelog](https://keepachangelog.com/). Datum je vydání dané verze.
 
+## [1.7.1] — 2026-07-20 — Čtení frekvenčního stropu sestavy 📖
+
+- **`groups` nově vrací `maxUserDailyImpressions`** (frekvenční strop sestavy —
+  max zobrazení na uživatele za den) v `--json` i v tabulkovém výpisu (sloupec
+  `Freq/day`, `—` když není nastaven). Hodnotu šlo dosud jen **nastavit**
+  (`--max-daily-impression` na create/update), ne přečíst — čtecí sloupec v API
+  je plurál `maxUserDailyImpressions` (setter je singulár). Vytáhlo si to čtení
+  nočního bid automatu (`ppc-automat`), který cíl zobrazení počítá z frekvence —
+  ať ho bere z živé hodnoty, ne z předpokladu. Čistě aditivní, žádný nový příkaz.
+
 ## [1.7.0] — 2026-07-19 — Vizuální podpis + čitelný help 🎨
 
 - **ASCII banner s barvami** („SKLIK" v seznamácké červené + verze a tagline) —

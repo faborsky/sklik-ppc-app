@@ -44,7 +44,7 @@ Use these exact commands:
 - **Campaigns**: `campaigns`, `campaign-create`, `campaign-update`, `campaign-remove`, `campaign-restore` (undelete), `campaign-stats`, `campaign-targeting`
   - Targeting flags on create/update: `--regions` (CSV region IDs), `--device-bids desktop:mobile:tablet:other` (%), `--schedule-json` (update only), `--ad-selection {weighted,random,cpa,cos}` (ad rotation — `random` = even split for a clean creative A/B test)
 - **Groups**: `groups`, `group-create`, `group-update`, `group-remove`, `group-restore`, `group-stats`
-  - `--max-daily-impression N` on create/update = frequency cap (max impressions per user per day)
+  - `--max-daily-impression N` on create/update = frequency cap (max impressions per user per day); `groups` reads the current value back as `maxUserDailyImpressions`
 - **Keywords**: `keywords` (filter `--group-id`/`--campaign-id`), `keyword-create`, `keyword-create-batch`, `keyword-update`, `keyword-remove`, `keyword-restore`, `keyword-stats`, **`keyword-set`** (declarative upsert of a group's keywords; `--remove-others` = full sync to the given list — powerful, present the diff first)
 - **Ads (ETA)**: `ads` (filter `--group-id`/`--campaign-id`), `ad-create`, `ad-update` (status only), **`ad-replace`** (safe atomic text change — see Ad text updates), `ad-remove`, `ad-restore`, `ad-stats`
 - **Combined (native) ads**: `combined-create` — kombinovaná reklama for the display network (incl. native in-article placements). List via `ads` (`adType: combined`), stats via `ad-stats`, remove via `ad-remove`. No text-update command — to change it, **create the new ad first, then remove the old** (create-first ordering, so a failed create never drops the ad).

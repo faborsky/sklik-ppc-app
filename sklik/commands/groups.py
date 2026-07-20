@@ -23,7 +23,8 @@ def cmd_groups(args: argparse.Namespace) -> None:
     """List ad groups."""
     restriction: dict = {"isDeleted": False}
 
-    cols = ["id", "name", "maxCpc", "status", "campaign.id", "campaign.name"]
+    cols = ["id", "name", "maxCpc", "status", "maxUserDailyImpressions",
+            "campaign.id", "campaign.name"]
 
     data = _api_call("groups.list", [restriction, {
         "limit": 500, "offset": 0, "displayColumns": cols,
@@ -44,6 +45,7 @@ def cmd_groups(args: argparse.Namespace) -> None:
                 "name": g.get("name"),
                 "status": g.get("status"),
                 "maxCpc": _halere_to_czk(g.get("maxCpc")),
+                "maxUserDailyImpressions": g.get("maxUserDailyImpressions"),
                 "campaignId": g.get("campaign", {}).get("id") if isinstance(g.get("campaign"), dict) else g.get("campaign.id"),
                 "campaignName": g.get("campaign", {}).get("name") if isinstance(g.get("campaign"), dict) else g.get("campaign.name"),
             })
@@ -52,12 +54,14 @@ def cmd_groups(args: argparse.Namespace) -> None:
         if not groups:
             print("No groups found.")
             return
-        print(f"{'ID':<12} {'Name':<30} {'Status':<10} {'Max CPC':<12} {'Campaign'}")
-        print("-" * 90)
+        print(f"{'ID':<12} {'Name':<30} {'Status':<10} {'Max CPC':<12} {'Freq/day':<9} {'Campaign'}")
+        print("-" * 98)
         for g in groups:
             c_name = g.get("campaign", {}).get("name", "?") if isinstance(g.get("campaign"), dict) else g.get("campaign.name", "?")
+            freq = g.get("maxUserDailyImpressions")
             print(f"{g.get('id', ''):<12} {g.get('name', ''):<30} "
-                  f"{g.get('status', ''):<10} {_format_money(g.get('maxCpc')):<12} {c_name}")
+                  f"{g.get('status', ''):<10} {_format_money(g.get('maxCpc')):<12} "
+                  f"{(str(freq) if freq is not None else '—'):<9} {c_name}")
 
 
 def cmd_group_create(args: argparse.Namespace) -> None:

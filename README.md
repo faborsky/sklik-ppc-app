@@ -8,7 +8,7 @@ Pokrývá kompletní životní cyklus *search* i *obsahových* kampaní — kamp
 
 ## 🆕 Co je nového
 
-Poslední verze **1.7.0** — vizuální podpis (ASCII banner jen pro lidi v terminálu) a seskupený `--help` (88 příkazů po doménách místo jednoho nečitelného seznamu). Celá historie: **[CHANGELOG.md](CHANGELOG.md)**.
+Poslední verze **1.7.1** — `groups` teď ve výpisu ukazuje i frekvenční strop sestavy (`maxUserDailyImpressions`); dosud šel jen nastavit, ne přečíst. Předtím **1.7.0** — vizuální podpis (ASCII banner jen pro lidi v terminálu) a seskupený `--help` (88 příkazů po doménách). Celá historie: **[CHANGELOG.md](CHANGELOG.md)**.
 
 ## Dva způsoby, jak appku používat
 
@@ -156,7 +156,7 @@ Souhrn celého účtu **jedním voláním** — místo řetězení `account` + `
 
 | Příkaz | Klíčové přepínače |
 |--------|-------------------|
-| `groups` | `--campaign-id`, `--json` |
+| `groups` | `--campaign-id`, `--json` — výpis vrací i `maxUserDailyImpressions` (frekvenční strop sestavy) |
 | `group-create` | `--campaign-id`, `--name`, `--cpc` (CZK), `--max-daily-impression`, `--json` |
 | `group-update` | `--group-id`, `--name`, `--cpc`, `--status`, `--max-daily-impression`, `--json` |
 | `group-remove` | `--group-id`, `--confirm`, `--json` |
