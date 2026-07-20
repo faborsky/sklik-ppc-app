@@ -176,7 +176,8 @@ def cmd_pulse(args: argparse.Namespace) -> None:
         prev_report = _fetch_report("campaigns", {}, prev_from, prev_to, cols, user_id=user_id)
         prev_map = {r.get("id"): _first_stats(r) for r in prev_report}
 
-    # Per-campaign rows (money stays in haléře until display); accumulate totals.
+    # Per-campaign rows (cost stays in haléře until display; conversionValue
+    # arrives from the API already in CZK — see docs/api-notes.md); accumulate totals.
     rows = []
     tot = {"clicks": 0, "impressions": 0, "totalMoney": 0, "conversions": 0.0, "conversionValue": 0}
     for r in cur_report:
@@ -197,8 +198,8 @@ def cmd_pulse(args: argparse.Namespace) -> None:
             "avgCpc_czk": (cost / clicks / 100) if clicks else 0.0,
             "cost_czk": cost / 100,
             "conversions": conv,
-            "convValue_czk": val / 100,
-            "pno": (cost / val * 100) if val else None,
+            "convValue_czk": val,
+            "pno": (cost / 100 / val * 100) if val else None,
             "d_cost": _pct_delta(cost, p.get("totalMoney")) if compare else None,
             "d_clicks": _pct_delta(clicks, p.get("clicks")) if compare else None,
             "d_conv": _pct_delta(conv, p.get("conversions")) if compare else None,
@@ -229,8 +230,8 @@ def cmd_pulse(args: argparse.Namespace) -> None:
         "ctr": (tot["clicks"] / tot["impressions"] * 100) if tot["impressions"] else 0.0,
         "avgCpc_czk": (tot["totalMoney"] / tot["clicks"] / 100) if tot["clicks"] else 0.0,
         "conversions": tot["conversions"],
-        "convValue_czk": tot["conversionValue"] / 100,
-        "pno": (tot["totalMoney"] / tot["conversionValue"] * 100) if tot["conversionValue"] else None,
+        "convValue_czk": tot["conversionValue"],
+        "pno": (tot["totalMoney"] / 100 / tot["conversionValue"] * 100) if tot["conversionValue"] else None,
     }
     if compare:
         totals["d_cost"] = _pct_delta(tot["totalMoney"], ptot["totalMoney"])

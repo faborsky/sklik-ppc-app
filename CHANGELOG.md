@@ -2,6 +2,24 @@
 
 Verze aplikace je v `sklik/__init__.py` (`__version__`, SemVer). Formát vychází z [Keep a Changelog](https://keepachangelog.com/). Datum je vydání dané verze.
 
+## [1.7.2] — 2026-07-20 — Oprava jednotek hodnoty konverzí (100×) 🐛
+
+- **FIX: `conversionValue` ze statistik se už nedělí stem.** API vrací sloupec
+  `conversionValue` v reportech **přímo v Kč** (je to hodnota posílaná konverzním
+  kódem), na rozdíl od ostatních peněžních sloupců (`totalMoney`, `avgCpc`,
+  `clickMoney`, `impressionMoney`), které jsou v haléřích. CLI ho převádělo
+  jako haléře → **100× podhodnocená hodnota konverzí** v `--json` výstupu
+  `campaign-stats`, `group-stats`, `keyword-stats`, `ad-stats` a
+  `search-queries`, a v `pulse` navíc **100× nadhodnocené PNO** (počítalo se
+  z haléřových nákladů proti korunové hodnotě). Ověřeno živě proti sloupci
+  `pno`, který počítá samo API. Nahlásil uživatel — díky!
+- Audit všech ostatních peněžních míst (bidy, rozpočty, kredit, suggest CPC,
+  konverzní definice) proti surovým odpovědím API: jednotky správně, beze změn.
+- Z převodní tabulky odstraněn i mrtvý sloupec `conversionPrice` — API žádný
+  takový report sloupec nemá (`readReport` ho odmítá) a CLI ho nikdy nežádalo.
+- Quirk zdokumentován v `docs/api-notes.md` (tři jednotkové konvence API:
+  haléře / Kč ve `sharedbudgets` + `getCredit` + stats `conversionValue`).
+
 ## [1.7.1] — 2026-07-20 — Čtení frekvenčního stropu sestavy 📖
 
 - **`groups` nově vrací `maxUserDailyImpressions`** (frekvenční strop sestavy —

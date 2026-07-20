@@ -5,4 +5,4 @@ import warnings
 # by any submodule; must run first so stdout JSON is never corrupted.
 warnings.filterwarnings("ignore", message=r".*OpenSSL.*")
 
-__version__ = "1.7.1"
+__version__ = "1.7.2"

@@ -8,7 +8,7 @@ Pokrývá kompletní životní cyklus *search* i *obsahových* kampaní — kamp
 
 ## 🆕 Co je nového
 
-Poslední verze **1.7.1** — `groups` teď ve výpisu ukazuje i frekvenční strop sestavy (`maxUserDailyImpressions`); dosud šel jen nastavit, ne přečíst. Předtím **1.7.0** — vizuální podpis (ASCII banner jen pro lidi v terminálu) a seskupený `--help` (88 příkazů po doménách). Celá historie: **[CHANGELOG.md](CHANGELOG.md)**.
+Poslední verze **1.7.2** — oprava jednotek: `conversionValue` ze statistik vrací API v Kč (ne v haléřích), CLI ho ale dělilo stem → 100× podhodnocená hodnota konverzí ve stats příkazech a 100× nadhodnocené PNO v `pulse`. Nahlásil uživatel — díky! Předtím **1.7.1** — `groups` ukazuje i frekvenční strop sestavy (`maxUserDailyImpressions`). Celá historie: **[CHANGELOG.md](CHANGELOG.md)**.
 
 ## Dva způsoby, jak appku používat
 

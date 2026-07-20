@@ -33,9 +33,13 @@ def _output_json(data: object) -> None:
 
 
 def _convert_stats_to_czk(stats: list[dict]) -> list[dict]:
-    """Convert money fields in stats from halere to CZK."""
-    money_fields = ["avgCpc", "totalMoney", "conversionPrice", "conversionValue",
-                    "clickMoney", "impressionMoney"]
+    """Convert money fields in stats from halere to CZK.
+
+    conversionValue is NOT here: the API returns it in plain CZK (it's the
+    value the conversion code sends), unlike the other money columns —
+    verified live against the API's own pno column, see docs/api-notes.md.
+    """
+    money_fields = ["avgCpc", "totalMoney", "clickMoney", "impressionMoney"]
     result = []
     for s in stats:
         s2 = dict(s)
