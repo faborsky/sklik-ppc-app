@@ -71,7 +71,7 @@ Full API behaviour, quirks, rate-limit internals and status codes: **[docs/api-n
 
 ## Release checklist
 
-Bump `__version__` in `sklik/__init__.py` → update README (version line + command tables), CLAUDE.md (command count/index), CHANGELOG.md (new `## [x.y.z] — YYYY-MM-DD` entry), bundled skill → run `python scripts/check_docs_consistency.py` (must pass) → commit → tag `vX.Y.Z`.
+Bump `__version__` in `sklik/__init__.py` → update README (version line + command tables), CLAUDE.md (command count/index), CHANGELOG.md (new `## [x.y.z] — YYYY-MM-DD` entry), bundled skill → run `python scripts/check_docs_consistency.py` (must pass) → commit → tag `vX.Y.Z` → **GitHub Release from the tag** (`gh release create vX.Y.Z --latest --title "vX.Y.Z — <changelog headline>"`, notes = the CHANGELOG entry). A pushed tag alone does NOT show on /releases and subscribers get no notification — the release step is mandatory, not optional.
 
 ## Documentation map
 

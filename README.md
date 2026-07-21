@@ -10,6 +10,8 @@ Pokrývá kompletní životní cyklus *search* i *obsahových* kampaní — kamp
 
 Poslední verze **1.7.2** — oprava jednotek: `conversionValue` ze statistik vrací API v Kč (ne v haléřích), CLI ho ale dělilo stem → 100× podhodnocená hodnota konverzí ve stats příkazech a 100× nadhodnocené PNO v `pulse`. Nahlásil uživatel — díky! Předtím **1.7.1** — `groups` ukazuje i frekvenční strop sestavy (`maxUserDailyImpressions`). Celá historie: **[CHANGELOG.md](CHANGELOG.md)**.
 
+> 💡 Chceš dostávat upozornění na nové verze? Na GitHubu: **Watch → Custom → Releases**.
+
 ## Dva způsoby, jak appku používat
 
 **A) Orchestrace přes Claude Code (výchozí a nejjednodušší).** Appku řídí Claude Code (nebo jiný coding agent) přes přibalený skill — ty zadáváš cíle česky, agent volá CLI, drží bezpečnostní pravidla (schválení před zápisem, `--confirm` u mazání, atomická výměna inzerátů) a hlídá API limity. Nejrychlejší start: otevři Claude Code a vlož mu prompt typu:
