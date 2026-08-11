@@ -2,6 +2,41 @@
 
 Verze aplikace je v `sklik/__init__.py` (`__version__`, SemVer). Formát vychází z [Keep a Changelog](https://keepachangelog.com/). Datum je vydání dané verze.
 
+## [1.8.0] — 2026-08-11 — Win rate, granularita statistik a oprava zobrazení CTR 📊
+
+- **NOVÉ: `winRate` ve statistikách sestav** (`group-stats`) — podíl vyhraných aukcí.
+  Do teď nebyl v CLI vůbec dostupný, přestože ho API vrací; jediné, co se dalo číst,
+  byly `ish`/`ishSum`/`missImpressions`, které jsou u obsahových kampaní konstantní
+  a nenesou informaci. **Existuje jen na sestavách** — kampaně, klíčová slova ani
+  inzeráty ekvivalent nemají.
+- **NOVÉ: `--granularity {total,daily,weekly,monthly,quarterly,yearly}`** u `campaign-stats`,
+  `group-stats`, `keyword-stats` a `ad-stats`. Dvoukrokový report to uměl už dřív, ale
+  CLI to nevystavovalo — denní řadu šlo dosud získat jen voláním po jednom dni.
+  U ne-`total` granularity přibude v lidském výstupu datum období.
+- **NOVÉ statistické sloupce** tam, kde je API pro danou entitu zná: `exhaustedBudgetShare`
+  (podíl dne s vyčerpaným rozpočtem — jemnější než binární `exhaustedBudget`),
+  `impressionMoney` / `clickMoney` (rozpad útraty), `avgCpt`, `underForestThreshold`,
+  `stoppedBySchedule`.
+- **NOVÉ: `adSelection` (rotace reklam) ve výpisu `campaigns`** — sloupec `Rotation`
+  v lidském výstupu a klíč v `--json`. Nastavit ji šlo dosud přes `--ad-selection`,
+  ale přečíst zpátky ne.
+- **FIX: CTR se v lidském výstupu tisklo 100× menší.** API vrací `ctr` jako podíl
+  (0,0073), CLI ho tisklo jako procento → `CTR: 0.01%` místo `0.73%` v `campaign-stats`,
+  `group-stats`, `keyword-stats`, `ad-stats` a `search-queries`. `pulse` a `account`
+  si CTR počítají samy, ty postižené nebyly. **`--json` výstup se nemění** (`ctr`
+  zůstává podílem) — na jeho tvaru stojí navazující automatizace.
+- **FIX: `avgCpt` se nepřevádělo z haléřů** na Kč jako ostatní peněžní sloupce.
+- **FIX: `sitelinks` padalo na `TypeError`**, když měl odkaz prázdnou URL — API vrací `url: null`
+  a `.get("url", "")` proti `None` nechrání (klíč existuje, default se nepoužije). Nalezeno při
+  regresním testu této verze. ⚠️ Stejný vzorec je i v dalších výpisech (`campaigns`, `groups`,
+  `keywords`, `retargeting`, `conversions`, `account`) — tam zatím pád nikdo nenahlásil, takže
+  zůstávají beze změny; `banners` a `placements` už ošetřené byly.
+- **Interně:** `STAT_COLUMNS` nahrazen funkcí `stat_columns(entity)`, protože sloupce
+  povolené pro jednu entitu shodí `readReport` u jiné (`400 Bad arguments`). Původní
+  název zůstává kvůli zpětné kompatibilitě. Kompletní mapa sloupců podle entit +
+  poznámka, že **kampaňová frekvence zobrazení v API vůbec neexistuje** (a že
+  **sestavový cap přebíjí kampaňový**), je v `docs/api-notes.md`.
+
 ## [1.7.2] — 2026-07-20 — Oprava jednotek hodnoty konverzí (100×) 🐛
 
 - **FIX: `conversionValue` ze statistik se už nedělí stem.** API vrací sloupec

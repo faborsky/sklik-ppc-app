@@ -39,7 +39,7 @@ CLI accepts/displays **CZK**; the API uses haléře (100 = 1 Kč). Conversion is
 
 - **Overview:** `account`, `api-limits`, `pulse` (warns when the window's stats aren't complete yet), `credit`, `regions`, `autotagging`, `autotagging-update`
 - **Campaigns:** `campaigns`, `campaign-create/update/remove/restore/stats/targeting` — targeting: `--regions`, `--device-bids`, `--schedule-json`, `--ad-selection {weighted,random,cpa,cos}`
-- **Groups:** `groups`, `group-create/update/remove/restore/stats` — `--max-daily-impression` = frequency cap
+- **Groups:** `groups`, `group-create/update/remove/restore/stats` — `--max-daily-impression` = frequency cap (the campaign-level cap in the web UI is invisible to the API, and the group cap wins where both are set); `group-stats` is the only entity returning `winRate`
 - **Keywords:** `keywords`, `keyword-create`, `keyword-create-batch`, `keyword-update/remove/restore/stats`, **`keyword-set`** (declarative upsert; `--remove-others` = full sync)
 - **Ads:** `ads`, `ad-create`, `combined-create`, `ad-update` (status only), **`ad-replace`** (safe atomic text change), `ad-remove`, `ad-restore`, `ad-stats`
 - **Negatives:** `negatives`, `negative-add`, `negative-add-batch`, `negative-remove`
@@ -57,7 +57,9 @@ CLI accepts/displays **CZK**; the API uses haléře (100 = 1 Kč). Conversion is
 - Destructive ops (`*-remove`) require `--confirm`.
 - Parse programmatic output with `--json`; on failure the error comes back as `{"error": …}` on **stdout** (human text on stderr otherwise).
 - The CLI self-enforces the account's request budget — don't fan out hundreds of parallel write calls or tight-retry loops.
-- Default stats window = last 30 days.
+- Default stats window = last 30 days; `--granularity {total,daily,weekly,monthly,quarterly,yearly}` splits it by period.
+- **Stat columns differ per report entity** — request them via `stat_columns(entity)` from `sklik/reports.py`, never a shared list; an unsupported column fails the whole `readReport` with 400.
+- Report ratios (`ctr`, `winRate`, `exhaustedBudgetShare`) are fractions 0–1 in `--json`; only the human output renders them as %.
 
 ## ⚠️ Critical for automation (read before scripting writes)
 

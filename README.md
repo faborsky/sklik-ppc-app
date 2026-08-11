@@ -8,7 +8,7 @@ Pokrývá kompletní životní cyklus *search* i *obsahových* kampaní — kamp
 
 ## 🆕 Co je nového
 
-Poslední verze **1.7.2** — oprava jednotek: `conversionValue` ze statistik vrací API v Kč (ne v haléřích), CLI ho ale dělilo stem → 100× podhodnocená hodnota konverzí ve stats příkazech a 100× nadhodnocené PNO v `pulse`. Nahlásil uživatel — díky! Předtím **1.7.1** — `groups` ukazuje i frekvenční strop sestavy (`maxUserDailyImpressions`). Celá historie: **[CHANGELOG.md](CHANGELOG.md)**.
+Poslední verze **1.8.0** — statistiky umí **`winRate`** (podíl vyhraných aukcí, jen u sestav) a **`--granularity daily`** pro denní řady; přibyly sloupce `exhaustedBudgetShare`, `impressionMoney`/`clickMoney`, `avgCpt`, a `campaigns` teď ukazuje i rotaci reklam (`adSelection`). **Opraveno: CTR se v lidském výstupu tisklo 100× menší** (`0.01%` místo `0.73%`) — `--json` se nemění. Předtím **1.7.2** — oprava jednotek `conversionValue` (100× podhodnocená hodnota konverzí). Celá historie: **[CHANGELOG.md](CHANGELOG.md)**.
 
 > 💡 Chceš dostávat upozornění na nové verze? Na GitHubu: **Watch → Custom → Releases**.
 
@@ -143,7 +143,7 @@ Souhrn celého účtu **jedním voláním** — místo řetězení `account` + `
 | `campaign-create` | `--name`, `--day-budget` (CZK), `--type fulltext/context/product`, `--status active/suspend`, `--regions`, `--device-bids`, `--ad-selection`, `--json` |
 | `campaign-update` | `--campaign-id`, `--name`, `--day-budget`, `--status`, `--regions`, `--device-bids`, `--schedule-json`, `--ad-selection`, `--json` |
 | `campaign-remove` | `--campaign-id`, `--confirm`, `--json` |
-| `campaign-stats` | `--campaign-id`, `--date-from`, `--date-to`, `--json` |
+| `campaign-stats` | `--campaign-id`, `--date-from`, `--date-to`, `--granularity {total,daily,weekly,monthly,quarterly,yearly}`, `--json` |
 | `campaign-targeting` | `--campaign-id`, `--json` — přehled geo / zařízení / rozvrhu |
 | `campaign-restore` | `--campaign-id`, `--json` — obnoví smazanou kampaň (undelete) |
 
@@ -162,7 +162,7 @@ Souhrn celého účtu **jedním voláním** — místo řetězení `account` + `
 | `group-create` | `--campaign-id`, `--name`, `--cpc` (CZK), `--max-daily-impression`, `--json` |
 | `group-update` | `--group-id`, `--name`, `--cpc`, `--status`, `--max-daily-impression`, `--json` |
 | `group-remove` | `--group-id`, `--confirm`, `--json` |
-| `group-stats` | `--group-id`, `--campaign-id`, `--date-from`, `--date-to`, `--json` |
+| `group-stats` | `--group-id`, `--campaign-id`, `--date-from`, `--date-to`, `--granularity …`, `--json` — jako jediná entita vrací i **`winRate`** (podíl vyhraných aukcí) |
 | `group-restore` | `--group-id`, `--json` — obnoví smazanou sestavu (undelete) |
 
 > `--max-daily-impression N` = frekvenční limit (max. zobrazení na uživatele za den) — Sklik pole `maxUserDailyImpression`.
@@ -176,7 +176,7 @@ Souhrn celého účtu **jedním voláním** — místo řetězení `account` + `
 | `keyword-create-batch` | `--group-id`, `--keywords-json`, `--json` |
 | `keyword-update` | `--keyword-id`, `--cpc`, `--status`, `--url`, `--json` |
 | `keyword-remove` | `--keyword-id`, `--confirm`, `--json` |
-| `keyword-stats` | `--group-id`, `--campaign-id`, `--date-from`, `--date-to`, `--json` |
+| `keyword-stats` | `--group-id`, `--campaign-id`, `--date-from`, `--date-to`, `--granularity …`, `--json` |
 | `keyword-restore` | `--keyword-id`, `--json` — obnoví smazané slovo (undelete) |
 | `keyword-set` | `--group-id`, `--keywords-json`, `--remove-others`, `--json` — deklarativní nastavení slov sestavy |
 
@@ -192,7 +192,7 @@ Souhrn celého účtu **jedním voláním** — místo řetězení `account` + `
 | `ad-update` | `--ad-id`, `--status`, `--json` (jen stav, na místě) |
 | `ad-replace` | `--ad-id`, `--headline1/2/3`, `--description/--description2`, `--final-url`, `--path1/2`, `--json` |
 | `ad-remove` | `--ad-id`, `--confirm`, `--json` |
-| `ad-stats` | `--group-id`, `--date-from`, `--date-to`, `--json` |
+| `ad-stats` | `--group-id`, `--date-from`, `--date-to`, `--granularity …`, `--json` |
 | `ad-restore` | `--ad-id`, `--json` — obnoví smazaný inzerát (undelete) |
 
 > **Změna textu inzerátu = `ad-replace`, NIKDY ruční `ad-remove` + `ad-create`.** Sklik neumí text upravit na místě: jakákoli změna kreativy udělá přes `ads.update` **atomickou výměnu na serveru** (smaže starý + vytvoří nový v JEDNÉ operaci, vrátí `newAdIds`). Když nový inzerát neprojde validací (typicky `ad_duplicate_in_db`), **původní zůstane nedotčený**. Ruční remove+create tuhle jistotu nemá — když selže create po removu, sestava tiše ztratí inzerát (reálně se to stalo). `ad-replace` načte stávající inzerát, aplikuje jen zadaná pole (zbytek zachová), předvaliduje přes `ads.check` a pak provede atomickou výměnu. Jen textové (eta) inzeráty.

@@ -9,10 +9,10 @@ from datetime import datetime, timedelta
 from sklik.api import _api_call, _fail, _fail_msg, _is_sem_blocked
 from sklik.commands.campaigns import _get_campaign_type
 from sklik.formatting import (
-    _czk_to_halere, _halere_to_czk, _format_money,
-    _output_json, _convert_stats_to_czk,
+    _czk_to_halere, _halere_to_czk, _format_money, _format_share,
+    _format_stat_date, _output_json, _convert_stats_to_czk,
 )
-from sklik.reports import _fetch_report, STAT_COLUMNS
+from sklik.reports import _fetch_report, stat_columns
 
 
 
@@ -160,11 +160,13 @@ def cmd_keyword_stats(args: argparse.Namespace) -> None:
     date_from = args.date_from or (datetime.now() - timedelta(days=30)).strftime("%Y-%m-%d")
     date_to = args.date_to or datetime.now().strftime("%Y-%m-%d")
 
+    gran = getattr(args, "granularity", "total")
     restriction: dict = {}
 
-    cols = ["id", "name", "matchType", "group.id", "group.name", "campaign.id"] + STAT_COLUMNS
+    cols = ["id", "name", "matchType", "group.id", "group.name", "campaign.id"] + stat_columns("keywords")
     report = _fetch_report("keywords", restriction, date_from, date_to,
-                           cols, user_id=getattr(args, "user_id", None))
+                           cols, granularity=gran,
+                           user_id=getattr(args, "user_id", None))
 
     # Client-side group/campaign filter
     if args.group_id:
@@ -187,8 +189,9 @@ def cmd_keyword_stats(args: argparse.Namespace) -> None:
         for r in report:
             print(f"  [{r.get('matchType', '?')}] {r.get('name', '?')} (ID: {r.get('id')})")
             for s in r.get("stats", []):
-                print(f"    Clicks: {s.get('clicks', 0)}  Impr: {s.get('impressions', 0)}  "
-                      f"CTR: {s.get('ctr', 0):.2f}%  Avg CPC: {_format_money(s.get('avgCpc'))}  "
+                print(f"    {_format_stat_date(s, gran)}"
+                      f"Clicks: {s.get('clicks', 0)}  Impr: {s.get('impressions', 0)}  "
+                      f"CTR: {_format_share(s.get('ctr'))}  Avg CPC: {_format_money(s.get('avgCpc'))}  "
                       f"Cost: {_format_money(s.get('totalMoney'))}  "
                       f"Conv: {s.get('conversions', 0)}")
 

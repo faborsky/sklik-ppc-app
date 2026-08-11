@@ -59,6 +59,7 @@ from sklik.commands.display_targeting import (
 from sklik.commands.budgets import (
     cmd_budgets, cmd_budget_create, cmd_budget_update, cmd_budget_remove,
 )
+from sklik.reports import STAT_GRANULARITIES
 
 
 
@@ -268,6 +269,8 @@ def main() -> None:
     p.add_argument("--campaign-id", type=int, help="Campaign ID (all if omitted)")
     p.add_argument("--date-from", help="Start date YYYY-MM-DD")
     p.add_argument("--date-to", help="End date YYYY-MM-DD")
+    p.add_argument("--granularity", choices=STAT_GRANULARITIES, default="total",
+                   help="Split stats by period (default: total)")
     p.add_argument("--json", **json_kwargs)
 
     # --- campaign-restore ---
@@ -311,6 +314,8 @@ def main() -> None:
     p.add_argument("--campaign-id", type=int, help="Campaign ID")
     p.add_argument("--date-from", help="Start date YYYY-MM-DD")
     p.add_argument("--date-to", help="End date YYYY-MM-DD")
+    p.add_argument("--granularity", choices=STAT_GRANULARITIES, default="total",
+                   help="Split stats by period (default: total)")
     p.add_argument("--json", **json_kwargs)
 
     # --- group-restore ---
@@ -359,6 +364,8 @@ def main() -> None:
     p.add_argument("--campaign-id", type=int, help="Campaign ID")
     p.add_argument("--date-from", help="Start date YYYY-MM-DD")
     p.add_argument("--date-to", help="End date YYYY-MM-DD")
+    p.add_argument("--granularity", choices=STAT_GRANULARITIES, default="total",
+                   help="Split stats by period (default: total)")
     p.add_argument("--json", **json_kwargs)
 
     # --- keyword-restore ---
@@ -456,6 +463,8 @@ def main() -> None:
     p.add_argument("--group-id", type=int, help="Group ID")
     p.add_argument("--date-from", help="Start date YYYY-MM-DD")
     p.add_argument("--date-to", help="End date YYYY-MM-DD")
+    p.add_argument("--granularity", choices=STAT_GRANULARITIES, default="total",
+                   help="Split stats by period (default: total)")
     p.add_argument("--json", **json_kwargs)
 
     # --- ad-restore ---

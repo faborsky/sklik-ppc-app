@@ -8,10 +8,10 @@ from datetime import datetime, timedelta
 
 from sklik.api import _api_call, _fail, _fail_msg, _is_sem_blocked
 from sklik.formatting import (
-    _czk_to_halere, _halere_to_czk, _format_money,
-    _output_json, _convert_stats_to_czk,
+    _czk_to_halere, _halere_to_czk, _format_money, _format_share,
+    _format_stat_date, _output_json, _convert_stats_to_czk,
 )
-from sklik.reports import _fetch_report, STAT_COLUMNS
+from sklik.reports import _fetch_report, stat_columns
 
 
 
@@ -95,7 +95,7 @@ def cmd_campaigns(args: argparse.Namespace) -> None:
     restriction: dict = {"isDeleted": False}
 
     cols = ["id", "name", "status", "budget.dayBudget", "type",
-            "createDate", "startDate", "endDate"]
+            "adSelection", "createDate", "startDate", "endDate"]
 
     data = _api_call("campaigns.list", [restriction, {
         "limit": 100, "offset": 0, "displayColumns": cols,
@@ -117,6 +117,7 @@ def cmd_campaigns(args: argparse.Namespace) -> None:
                 "status": c.get("status"),
                 "type": c.get("type"),
                 "dayBudget": _halere_to_czk(budget.get("dayBudget")),
+                "adSelection": c.get("adSelection"),
                 "createDate": c.get("createDate"),
                 "startDate": c.get("startDate"),
                 "endDate": c.get("endDate"),
@@ -126,13 +127,15 @@ def cmd_campaigns(args: argparse.Namespace) -> None:
         if not campaigns:
             print("No campaigns found.")
             return
-        print(f"{'ID':<12} {'Name':<35} {'Status':<10} {'Type':<10} {'Day Budget':<12}")
-        print("-" * 85)
+        print(f"{'ID':<12} {'Name':<35} {'Status':<10} {'Type':<10} "
+              f"{'Day Budget':<12} {'Rotation':<10}")
+        print("-" * 96)
         for c in campaigns:
             budget = c.get("budget", {}) if isinstance(c.get("budget"), dict) else {}
             print(f"{c.get('id', ''):<12} {c.get('name', ''):<35} "
                   f"{c.get('status', ''):<10} {c.get('type', ''):<10} "
-                  f"{_format_money(budget.get('dayBudget')):<12}")
+                  f"{_format_money(budget.get('dayBudget')):<12} "
+                  f"{c.get('adSelection') or '—':<10}")
 
 
 def cmd_campaign_create(args: argparse.Namespace) -> None:
@@ -228,13 +231,15 @@ def cmd_campaign_stats(args: argparse.Namespace) -> None:
     date_from = args.date_from or (datetime.now() - timedelta(days=30)).strftime("%Y-%m-%d")
     date_to = args.date_to or datetime.now().strftime("%Y-%m-%d")
 
+    gran = getattr(args, "granularity", "total")
     restriction: dict = {}
     if args.campaign_id:
         restriction["ids"] = [args.campaign_id]
 
-    cols = ["id", "name"] + STAT_COLUMNS
+    cols = ["id", "name"] + stat_columns("campaigns")
     report = _fetch_report("campaigns", restriction, date_from, date_to,
-                           cols, user_id=getattr(args, "user_id", None))
+                           cols, granularity=gran,
+                           user_id=getattr(args, "user_id", None))
 
     if args.json:
         for r in report:
@@ -249,8 +254,9 @@ def cmd_campaign_stats(args: argparse.Namespace) -> None:
         for r in report:
             print(f"  {r.get('name', '?')} (ID: {r.get('id')})")
             for s in r.get("stats", []):
-                print(f"    Clicks: {s.get('clicks', 0)}  Impr: {s.get('impressions', 0)}  "
-                      f"CTR: {s.get('ctr', 0):.2f}%  Avg CPC: {_format_money(s.get('avgCpc'))}  "
+                print(f"    {_format_stat_date(s, gran)}"
+                      f"Clicks: {s.get('clicks', 0)}  Impr: {s.get('impressions', 0)}  "
+                      f"CTR: {_format_share(s.get('ctr'))}  Avg CPC: {_format_money(s.get('avgCpc'))}  "
                       f"Cost: {_format_money(s.get('totalMoney'))}  "
                       f"Conv: {s.get('conversions', 0)}")
 

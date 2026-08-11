@@ -41,8 +41,10 @@ def cmd_sitelinks(args: argparse.Namespace) -> None:
         print(f"{'ID':<12} {'Name':<30} {'URL':<40} {'Status'}")
         print("-" * 95)
         for s in sitelinks:
-            print(f"{s.get('id', ''):<12} {s.get('name', ''):<30} "
-                  f"{s.get('url', ''):<40} {s.get('status', '')}")
+            # `or ''` not `.get(k, '')`: the API returns url=null for sitelinks
+            # created without one, and a present-but-None key skips the default.
+            print(f"{s.get('id', ''):<12} {(s.get('name') or ''):<30} "
+                  f"{(s.get('url') or ''):<40} {s.get('status') or ''}")
 
 
 def cmd_sitelink_create(args: argparse.Namespace) -> None:

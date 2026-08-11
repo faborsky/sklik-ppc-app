@@ -8,10 +8,10 @@ from datetime import datetime, timedelta
 
 from sklik.api import _api_call, _fail, _fail_msg, _is_sem_blocked
 from sklik.formatting import (
-    _czk_to_halere, _halere_to_czk, _format_money,
-    _output_json, _convert_stats_to_czk,
+    _czk_to_halere, _halere_to_czk, _format_money, _format_share,
+    _format_stat_date, _output_json, _convert_stats_to_czk,
 )
-from sklik.reports import _fetch_report, STAT_COLUMNS
+from sklik.reports import _fetch_report, stat_columns
 
 
 
@@ -123,13 +123,15 @@ def cmd_group_stats(args: argparse.Namespace) -> None:
     date_from = args.date_from or (datetime.now() - timedelta(days=30)).strftime("%Y-%m-%d")
     date_to = args.date_to or datetime.now().strftime("%Y-%m-%d")
 
+    gran = getattr(args, "granularity", "total")
     restriction: dict = {}
     if args.group_id:
         restriction["ids"] = [args.group_id]
 
-    cols = ["id", "name", "campaign.id", "campaign.name"] + STAT_COLUMNS
+    cols = ["id", "name", "campaign.id", "campaign.name"] + stat_columns("groups")
     report = _fetch_report("groups", restriction, date_from, date_to,
-                           cols, user_id=getattr(args, "user_id", None))
+                           cols, granularity=gran,
+                           user_id=getattr(args, "user_id", None))
 
     # Client-side campaign filter (API doesn't support campaign.ids in report restriction)
     if args.campaign_id:
@@ -149,10 +151,13 @@ def cmd_group_stats(args: argparse.Namespace) -> None:
         for r in report:
             print(f"  {r.get('name', '?')} (ID: {r.get('id')})")
             for s in r.get("stats", []):
-                print(f"    Clicks: {s.get('clicks', 0)}  Impr: {s.get('impressions', 0)}  "
-                      f"CTR: {s.get('ctr', 0):.2f}%  Avg CPC: {_format_money(s.get('avgCpc'))}  "
+                win = s.get("winRate")
+                win_str = f"  Win rate: {_format_share(win)}" if win is not None else ""
+                print(f"    {_format_stat_date(s, gran)}"
+                      f"Clicks: {s.get('clicks', 0)}  Impr: {s.get('impressions', 0)}  "
+                      f"CTR: {_format_share(s.get('ctr'))}  Avg CPC: {_format_money(s.get('avgCpc'))}  "
                       f"Cost: {_format_money(s.get('totalMoney'))}  "
-                      f"Conv: {s.get('conversions', 0)}")
+                      f"Conv: {s.get('conversions', 0)}{win_str}")
 
 
 def cmd_group_restore(args: argparse.Namespace) -> None:

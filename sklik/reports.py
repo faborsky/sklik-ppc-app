@@ -9,13 +9,45 @@ from sklik.api import _api_call
 # Report helper (two-step: createReport → readReport)
 # ---------------------------------------------------------------------------
 
-STAT_COLUMNS = [
+BASE_STAT_COLUMNS = [
     "clicks", "impressions", "ctr", "avgCpc", "avgPos",
     "totalMoney", "conversions", "conversionValue",
     "transactions", "pno",
     "missImpressions", "underLowerThreshold", "exhaustedBudget",
     "ish", "ishContext", "ishSum",
 ]
+
+# Columns the API accepts only for SOME report entities. Asking for one where
+# it isn't allowed fails the whole readReport with 400, so they can't live in
+# the shared base. Verified live 2026-08-11 by sending an invalid column and
+# reading the whitelist the API returns in the error (see docs/api-notes.md).
+_ENTITY_EXTRA_STAT_COLUMNS = {
+    "campaigns": ["impressionMoney", "clickMoney", "avgCpt",
+                  "exhaustedBudgetShare", "underForestThreshold", "stoppedBySchedule"],
+    "groups": ["impressionMoney", "clickMoney", "avgCpt",
+               "exhaustedBudgetShare", "underForestThreshold", "stoppedBySchedule",
+               "winRate"],
+    "keywords": ["impressionMoney", "clickMoney",
+                 "exhaustedBudgetShare", "underForestThreshold", "stoppedBySchedule"],
+    "ads": ["impressionMoney", "clickMoney", "avgCpt",
+            "exhaustedBudgetShare", "underForestThreshold", "stoppedBySchedule"],
+}
+
+# Kept for backwards compatibility with anything importing the old name.
+STAT_COLUMNS = list(BASE_STAT_COLUMNS)
+
+# Granularity values the API's displayOptions.statGranularity accepts.
+STAT_GRANULARITIES = ["total", "daily", "weekly", "monthly", "quarterly", "yearly"]
+
+
+def stat_columns(entity: str) -> list[str]:
+    """Stat columns valid for `entity`: the shared base plus its extras.
+
+    `winRate` (share of auctions won) exists ONLY on groups — the campaign
+    report has no equivalent, and campaign-level frequency capping isn't
+    exposed by the API at all.
+    """
+    return BASE_STAT_COLUMNS + _ENTITY_EXTRA_STAT_COLUMNS.get(entity, [])
 
 
 def _fetch_report(

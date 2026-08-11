@@ -8,7 +8,7 @@ from datetime import datetime, timedelta
 
 from sklik.api import _api_call, _fail, _fail_msg, _is_sem_blocked
 from sklik.formatting import (
-    _czk_to_halere, _halere_to_czk, _format_money,
+    _czk_to_halere, _halere_to_czk, _format_money, _format_share,
     _output_json, _convert_stats_to_czk,
 )
 from sklik.reports import _fetch_report, STAT_COLUMNS
@@ -132,4 +132,4 @@ def cmd_search_queries(args: argparse.Namespace) -> None:
             stats = r.get("stats", [{}])
             s = stats[0] if stats else {}
             print(f"{query:<40} {s.get('clicks', 0):<8} {s.get('impressions', 0):<8} "
-                  f"{s.get('ctr', 0):.1f}%{'':<3} {_format_money(s.get('totalMoney'))}")
+                  f"{_format_share(s.get('ctr')):<9} {_format_money(s.get('totalMoney'))}")
