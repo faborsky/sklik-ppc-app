@@ -8,7 +8,7 @@ Pokrývá kompletní životní cyklus *search* i *obsahových* kampaní — kamp
 
 ## 🆕 Co je nového
 
-Poslední verze **1.8.1** — **opraveno cílení kampaní**: `--regions` posílalo do API holá čísla místo structů (každý pokus o geo cílení končil chybou `regions[0] must be struct, not int`), `--device-bids` posílalo desetinná čísla místo celých (`must be int, not double`) a `--schedule-json` byl v dokumentaci v tvaru, který API odmítá. Díky za nahlášení patří studentovi kurzu AI First. Předtím **1.8.0** — statistiky umí **`winRate`** (podíl vyhraných aukcí, jen u sestav) a **`--granularity daily`** pro denní řady; přibyly sloupce `exhaustedBudgetShare`, `impressionMoney`/`clickMoney`, `avgCpt`, a `campaigns` teď ukazuje i rotaci reklam (`adSelection`). **Opraveno: CTR se v lidském výstupu tisklo 100× menší** (`0.01%` místo `0.73%`) — `--json` se nemění. Předtím **1.7.2** — oprava jednotek `conversionValue` (100× podhodnocená hodnota konverzí). Celá historie: **[CHANGELOG.md](CHANGELOG.md)**.
+Poslední verze **1.9.0** — **výpisy vrací kompletní data**. `campaigns` bralo z API jen prvních 100 kampaní (a `--status` filtroval až nad touhle useknutou stovkou), `groups`/`ads`/`banners` 500 řádků — větší účet tak tiše přišel o zbytek a nikde to nebylo vidět. Nově se všechny výpisy i reporty stránkují až do konce. Díky za nahlášení patří studentovi kurzu AI First. Předtím **1.8.1** — **opraveno cílení kampaní**: `--regions` posílalo do API holá čísla místo structů (každý pokus o geo cílení končil chybou `regions[0] must be struct, not int`), `--device-bids` posílalo desetinná čísla místo celých (`must be int, not double`) a `--schedule-json` byl v dokumentaci v tvaru, který API odmítá. Díky za nahlášení patří studentovi kurzu AI First. Předtím **1.8.0** — statistiky umí **`winRate`** (podíl vyhraných aukcí, jen u sestav) a **`--granularity daily`** pro denní řady; přibyly sloupce `exhaustedBudgetShare`, `impressionMoney`/`clickMoney`, `avgCpt`, a `campaigns` teď ukazuje i rotaci reklam (`adSelection`). **Opraveno: CTR se v lidském výstupu tisklo 100× menší** (`0.01%` místo `0.73%`) — `--json` se nemění. Předtím **1.7.2** — oprava jednotek `conversionValue` (100× podhodnocená hodnota konverzí). Celá historie: **[CHANGELOG.md](CHANGELOG.md)**.
 
 > 💡 Chceš dostávat upozornění na nové verze? Na GitHubu: **Watch → Custom → Releases**.
 
@@ -404,7 +404,7 @@ Skill ti dává **mechaniku** (jak věci udělat nástrojem) a **pravidla** (co 
 sklik-ppc-app/
 ├── sklik_cli.py        # Tenký entrypoint (volá sklik.cli.main)
 ├── sklik/              # Balík s implementací
-│   ├── api.py          #   engine: auth, session, rate-limit, _api_call, chyby
+│   ├── api.py          #   engine: auth, session, rate-limit, _api_call, stránkování, chyby
 │   ├── formatting.py   #   převod CZK⇄haléře + JSON výstup
 │   ├── reports.py      #   dvoukrokový report helper
 │   ├── images.py       #   načítání/kódování obrázků (bannery + combined)
@@ -424,7 +424,8 @@ sklik-ppc-app/
 
 - Protokol: JSON-RPC `POST` na `https://api.sklik.cz/drak/json/v5/{metoda}`. Endpoint je **připnutý na v5**, aby se CLI tiše nerozbilo při major změně API.
 - Reporty jsou dvoukrokové: `createReport` (filtry + období) → `readReport` (stránkování + sloupce).
-- API **nepodporuje** filtry na nadřazené entity (`campaign.ids`, `group.ids`, `status`) v `restrictionFilter` — proto se aplikují na straně klienta.
+- API **nepodporuje** filtry na nadřazené entity (`campaign.ids`, `group.ids`, `status`) v `restrictionFilter` — proto se aplikují na straně klienta, ale až nad kompletním seznamem.
+- **Výpisy jsou kompletní — appka je sama stránkuje.** Metody `*.list` vrací najednou nejvýš 5000 řádků (`statsDataLimit`) a **nehlásí, že něco useknuly** (v odpovědi není celkový počet). CLI proto prochází offsety až do konce: `campaigns`, `groups`, `keywords`, `negatives`, `ads`, `banners` i statistiky vrací celý účet. Do verze 1.8.1 tu byly natvrdo zadané stropy (kampaně 100, sestavy/inzeráty/bannery 500 řádků) a větší účet tiše přišel o zbytek.
 - Příklady použití API Drak: [github.com/seznam/sklik-api-examples](https://github.com/seznam/sklik-api-examples).
 
 > Kompletní chování API (kvirky reportů, bezpečná výměna inzerátů, bannery, konverze, retargeting, rate limity, stavové kódy): **[docs/api-notes.md](docs/api-notes.md)**.

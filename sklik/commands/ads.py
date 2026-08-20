@@ -6,7 +6,7 @@ import json
 import sys
 from datetime import datetime, timedelta
 
-from sklik.api import _api_call, _fail, _fail_msg
+from sklik.api import _api_call, _fail, _fail_msg, _fetch_all
 from sklik.formatting import (
     _halere_to_czk, _format_money, _format_share,
     _format_stat_date, _output_json, _convert_stats_to_czk,
@@ -29,11 +29,8 @@ def cmd_ads(args: argparse.Namespace) -> None:
             "shortLine", "longLine", "companyName",
             "status", "group.id", "group.name", "campaign.id", "campaign.name"]
 
-    data = _api_call("ads.list", [restriction, {
-        "limit": 500, "offset": 0, "displayColumns": cols,
-    }], getattr(args, "user_id", None))
-
-    ads = data.get("ads", [])
+    ads = _fetch_all("ads.list", restriction, cols, "ads",
+                     getattr(args, "user_id", None))
 
     # Client-side group/campaign filter (API doesn't filter on parent ids)
     if args.group_id:

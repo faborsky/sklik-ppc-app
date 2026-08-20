@@ -101,17 +101,24 @@ def cmd_search_queries(args: argparse.Namespace) -> None:
     cols = ["query", "clicks", "impressions", "avgCpc", "totalMoney",
             "conversions", "conversionValue", "keyword.id", "keyword.name", "keyword.matchType",
             "group.id", "group.name", "campaign.id"]
+    # The campaign/group filter runs client-side, so with one set we must read
+    # the WHOLE report first — capping the fetch would filter a truncated head
+    # and quietly under-report the campaign. --limit then caps what's shown.
+    filtered = bool(args.campaign_id or args.group_id)
     report = _fetch_report("queries", restriction, date_from, date_to,
-                           cols, limit=args.limit,
+                           cols, limit=None if filtered else args.limit,
                            user_id=getattr(args, "user_id", None))
 
-    # Client-side campaign/group filter
     if args.campaign_id:
         report = [r for r in report
                   if (r.get("campaign", {}).get("id") if isinstance(r.get("campaign"), dict) else r.get("campaign.id")) == args.campaign_id]
     if args.group_id:
         report = [r for r in report
                   if (r.get("group", {}).get("id") if isinstance(r.get("group"), dict) else r.get("group.id")) == args.group_id]
+
+    matched = len(report)
+    if args.limit and matched > args.limit:
+        report = report[:args.limit]
 
     if args.json:
         for r in report:
@@ -122,7 +129,14 @@ def cmd_search_queries(args: argparse.Namespace) -> None:
         if not report:
             print("No search queries found.")
             return
-        print(f"Search queries ({date_from} — {date_to}):\n")
+        if matched > len(report):
+            shown = f" — showing first {len(report)} of {matched}"
+        elif args.limit and len(report) >= args.limit:
+            # Unfiltered read stops at --limit rows, so this may not be all.
+            shown = f" — capped at --limit {args.limit}, there may be more"
+        else:
+            shown = ""
+        print(f"Search queries ({date_from} — {date_to}){shown}:\n")
         print(f"{'Query':<40} {'Clicks':<8} {'Impr':<8} {'CTR':<8} {'Cost'}")
         print("-" * 80)
         for r in report:

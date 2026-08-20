@@ -6,7 +6,7 @@ import json
 import sys
 from datetime import datetime, timedelta
 
-from sklik.api import _api_call, _fail, _fail_msg, _is_sem_blocked
+from sklik.api import _api_call, _fail, _fail_msg, _fetch_all, _is_sem_blocked
 from sklik.commands.campaigns import _get_campaign_type
 from sklik.formatting import (
     _czk_to_halere, _halere_to_czk, _format_money, _format_share,
@@ -27,11 +27,8 @@ def cmd_keywords(args: argparse.Namespace) -> None:
     cols = ["id", "name", "cpc", "matchType", "status", "url",
             "group.id", "group.name", "campaign.id"]
 
-    data = _api_call("keywords.list", [restriction, {
-        "limit": 5000, "offset": 0, "displayColumns": cols,
-    }], getattr(args, "user_id", None))
-
-    keywords = data.get("keywords", [])
+    keywords = _fetch_all("keywords.list", restriction, cols, "keywords",
+                          getattr(args, "user_id", None))
 
     # Client-side group/campaign filter
     if args.group_id:
@@ -206,11 +203,8 @@ def cmd_negatives(args: argparse.Namespace) -> None:
 
     cols = ["id", "name", "matchType", "group.id", "group.name"]
 
-    data = _api_call("keywords.negative.list", [restriction, {
-        "limit": 5000, "offset": 0, "displayColumns": cols,
-    }], getattr(args, "user_id", None))
-
-    keywords = data.get("keywords", [])
+    keywords = _fetch_all("keywords.negative.list", restriction, cols, "keywords",
+                          getattr(args, "user_id", None))
 
     # Client-side group/campaign filter. keywords.negative.list returns only
     # group-level negatives (campaign-level ones are write-only in the API),
@@ -219,10 +213,9 @@ def cmd_negatives(args: argparse.Namespace) -> None:
         keywords = [k for k in keywords
                     if (k.get("group", {}).get("id") if isinstance(k.get("group"), dict) else k.get("group.id")) == args.group_id]
     elif args.campaign_id:
-        gdata = _api_call("groups.list", [{"isDeleted": False}, {
-            "limit": 5000, "offset": 0, "displayColumns": ["id", "campaign.id"],
-        }], getattr(args, "user_id", None))
-        allowed = {g.get("id") for g in gdata.get("groups", [])
+        gr = _fetch_all("groups.list", {"isDeleted": False}, ["id", "campaign.id"],
+                        "groups", getattr(args, "user_id", None))
+        allowed = {g.get("id") for g in gr
                    if (g.get("campaign", {}).get("id") if isinstance(g.get("campaign"), dict) else g.get("campaign.id")) == args.campaign_id}
         keywords = [k for k in keywords
                     if (k.get("group", {}).get("id") if isinstance(k.get("group"), dict) else k.get("group.id")) in allowed]

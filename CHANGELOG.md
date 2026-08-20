@@ -2,6 +2,50 @@
 
 Verze aplikace je v `sklik/__init__.py` (`__version__`, SemVer). Formát vychází z [Keep a Changelog](https://keepachangelog.com/). Datum je vydání dané verze.
 
+## [1.9.0] — 2026-08-20 — Výpisy vrací kompletní data (konec tichého usekávání) 📄
+
+Appka četla z API vždycky jen **první stránku** a tvářila se, že je to celý účet.
+Nahlásil to student kurzu AI First na výpisu kampaní; kontrola ukázala, že stejný
+strop měl každý výpis v appce. **Nejde o kosmetiku — na Jindrově vlastním účtu měl
+`ads` 521 inzerátů a vypisoval jich 500.**
+
+- **FIX: `campaigns` bralo z API jen prvních 100 kampaní** (`limit: 100, offset: 0`)
+  a `--status` filtroval **až nad touhle useknutou stovkou** — takže `--status active`
+  a `--status suspend` dohromady nikdy nedaly víc než 100 řádků. Účet se 130 kampaněmi
+  o 30 z nich tiše přišel; API na to neupozorní (v odpovědi není celkový počet).
+- **FIX: stejný strop v dalších výpisech** — `groups`, `ads`, `banners` a `banner-download`
+  po 500 řádcích, `keywords` a `negatives` po 5000. Nově se všechny stránkují až do konce.
+- **FIX: `campaign-update` hledal typ kampaně v seznamu prvních 100 kampaní** — u většího
+  účtu tedy úprava kampaně #101 a dál skončila hláškou „Campaign not found", i když
+  kampaň existovala. Teď se ptá přímo na to jedno ID (levnější **a** správné).
+- **FIX: statistiky se usekávaly na 5000 řádcích.** `readReport` víc než `statsDataLimit`
+  nevrátí a CLI si o zbytek neřeklo — u velkých účtů (`keyword-stats`, `search-queries`,
+  výpisy umístění) prostě chyběl konec dat. Report se teď dočte celý, uživatelský
+  `--limit` funguje dál jako strop.
+- **Jak to funguje:** stránkování je centrálně v enginu — `api._fetch_all()` pro `*.list`
+  a `reports._read_report_rows()` pro reporty; velikost stránky se bere z `api.limits`
+  (`statsDataLimit`, obvykle 5000), takže se sama přizpůsobí účtu. Runaway pojistka na
+  200 000 řádků **hlásí useknutí na stderr** — appka už nikdy nevrátí neúplný seznam mlčky.
+- **FIX: `search-queries --campaign-id/--group-id` filtrovalo až nad useknutým reportem** —
+  úplně stejná past jako u `campaigns --status`: přečetlo se prvních `--limit` řádků z celého
+  účtu a teprve na nich se hledala daná kampaň. Na testovacím účtu tak jedna kampaň místo
+  **124** dotazů ukázala 6. Nově se při filtru čte celý report a `--limit` ořezává až výsledek
+  (lidský výstup pak píše `showing first N of M`).
+- **Odolnost proti 413:** `retargeting-attached` posílal ID všech sestav v jednom poli;
+  na velkém účtu by přetekl per-call limit. Teď se dotazuje po dávkách.
+- **Zjištěno při testování stránkování reportů:** v `readReport` jsou `offset`/`limit`/`totalCount`
+  v jednotkách **entit, ne vrácených řádků**. U reportu vyhledávacích dotazů (`queries`) to není
+  totéž — vrací všechny dotazy klíčových slov na dané stránce, takže žádost o 5 klíčových slov
+  vrátí 6 řádků a 138 klíčových slov dá 127 řádků dotazů. Stránkovat podle počtu řádků by data
+  duplikovalo; appka proto posouvá offset o velikost stránky. Popsáno v `docs/api-notes.md`.
+- **Cena:** velký účet znamená víc requestů na jeden výpis (20 000 klíčových slov = 4 volání).
+  Request-budget to hlídá jako dřív; při skriptování nevoláním výpisy zbytečně dokola.
+- **Kontrola zbytku appky:** metody, které stránkovací parametry vůbec nemají
+  (`conversions.list`, `sitelinks.list`, `retargeting.lists.list`, `sharedbudgets.list`,
+  `images.constraints.list`), vrací všechno v jednom volání — tam problém není.
+  Ověřeno živě: offsety se nepřekrývají a stránkovaný i nestránkovaný běh vrací
+  identická data (kampaně, klíčová slova i report po 2/5/7 řádcích na stránku).
+
 ## [1.8.1] — 2026-08-20 — Cílení kampaní opraveno: geo, modifikátory zařízení, rozvrh 🎯
 
 Celá trojice přepínačů pro cílení kampaní posílala do API špatné datové tvary, takže

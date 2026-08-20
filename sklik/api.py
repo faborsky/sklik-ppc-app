@@ -162,6 +162,9 @@ RATE_LIMIT_MAX_WAIT = 180      # max seconds to wait out a full minute window
 # higher — better to throttle a little early than risk a block).
 RATE_LIMIT_FALLBACK_MINUTE = 250
 RATE_LIMIT_FALLBACK_DAY = 100000
+# Max rows one list/report call may return (api.limits → statsDataLimit); also
+# the paging step size, see _fetch_all.
+LIST_PAGE_SIZE_FALLBACK = 5000
 
 
 def _rate_limit_path() -> str:
@@ -189,14 +192,18 @@ def _save_rate_state(state: dict) -> None:
 
 
 def _ensure_limits(user_id: int | None) -> dict:
-    """Return cached {minute, day} request limits, refreshing via api.limits
-    at most once a day. Falls back to conservative defaults if unavailable."""
+    """Return cached {minute, day, page} limits, refreshing via api.limits
+    at most once a day. Falls back to conservative defaults if unavailable.
+
+    `page` is `statsDataLimit` — the max rows one list/report call may return,
+    i.e. the paging step size (see _fetch_all)."""
     state = _load_rate_state()
     cached = state.get("limits")
     if cached and (time.time() - state.get("limits_fetched", 0)) < RATE_LIMIT_REFRESH:
         return cached
 
     minute, day = RATE_LIMIT_FALLBACK_MINUTE, RATE_LIMIT_FALLBACK_DAY
+    page = LIST_PAGE_SIZE_FALLBACK
     try:
         # _throttle=False: avoids recursing back into the throttle (this call is
         # itself counted by _record_request, just not pre-checked).
@@ -204,10 +211,11 @@ def _ensure_limits(user_id: int | None) -> dict:
         lim = data.get("limits", {}) or {}
         minute = int(lim.get("minuteRequestLimit") or minute)
         day = int(lim.get("dayRequestLimit") or day)
+        page = int(lim.get("statsDataLimit") or page)
     except SystemExit:
         pass  # transient api.limits failure — keep fallbacks, retry next day
 
-    result = {"minute": minute, "day": day}
+    result = {"minute": minute, "day": day, "page": page}
     # Re-load: the api.limits call above just recorded a request timestamp.
     state = _load_rate_state()
     state["limits"] = result
@@ -441,6 +449,56 @@ def _api_call(method: str, params: list | None = None, user_id: int | None = Non
                     print(f"WARNING: {d.get('id')}: {d.get('field', '')}", file=sys.stderr)
 
     return data
+
+
+# ---------------------------------------------------------------------------
+# Paging for *.list methods
+# ---------------------------------------------------------------------------
+# The list methods take `limit`/`offset` in displayOptions, return NO total
+# count, and silently give you just the first page — so a single call with a
+# hardcoded limit quietly truncates every account bigger than that number
+# (this shipped in `campaigns` as limit=100 until v1.9.0). There is no
+# "give me everything" switch: the only correct read is to walk offsets until
+# a short page comes back. Page size is the account's `statsDataLimit`
+# (5000 by default); asking for more fails with
+# `406 You are requiring too much data in one request`.
+
+LIST_MAX_ITEMS = 200000  # runaway guard; a hit is reported, never silent
+
+
+def _list_page_size(user_id: int | None) -> int:
+    """Account's max rows per list/report call (cached with the rate limits)."""
+    limits = _ensure_limits(user_id)
+    size = limits.get("page") or LIST_PAGE_SIZE_FALLBACK
+    return max(1, int(size))
+
+
+def _fetch_all(method: str, restriction: dict, display_columns: list[str],
+               result_key: str, user_id: int | None = None,
+               page_size: int | None = None) -> list[dict]:
+    """Read EVERY row of a `*.list` method, paging through offsets.
+
+    `result_key` is the array key in the response (`campaigns`, `groups`, …).
+    Stops when a page comes back shorter than the page size. Hitting
+    LIST_MAX_ITEMS prints a warning to stderr (stdout stays parseable in
+    --json mode) rather than returning a truncated list as if it were whole.
+    """
+    size = page_size or _list_page_size(user_id)
+    rows: list[dict] = []
+    offset = 0
+    while True:
+        data = _api_call(method, [dict(restriction), {
+            "limit": size, "offset": offset, "displayColumns": display_columns,
+        }], user_id)
+        page = data.get(result_key, []) or []
+        rows.extend(page)
+        if len(page) < size:
+            return rows
+        offset += size
+        if len(rows) >= LIST_MAX_ITEMS:
+            print(f"WARNING: {method} returned more than {LIST_MAX_ITEMS} rows; "
+                  f"the list is truncated. Narrow the query.", file=sys.stderr)
+            return rows
 
 
 # ---------------------------------------------------------------------------

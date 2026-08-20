@@ -6,7 +6,8 @@ import json
 import sys
 from datetime import datetime, timedelta
 
-from sklik.api import _api_call, _fail, _fail_msg, _is_sem_blocked
+from sklik.api import (_api_call, _fail, _fail_msg, _fetch_all,
+                       _is_sem_blocked, _list_page_size)
 from sklik.formatting import (
     _czk_to_halere, _halere_to_czk, _format_money,
     _output_json, _convert_stats_to_czk,
@@ -266,13 +267,16 @@ def cmd_retargeting_attached(args: argparse.Namespace) -> None:
     if args.group_id:
         gids = [args.group_id]
     else:
-        gdata = _api_call("groups.list", [{"isDeleted": False}, {
-            "limit": 5000, "offset": 0, "displayColumns": ["id"],
-        }], uid)
-        gids = [g["id"] for g in gdata.get("groups", [])]
+        gids = [g["id"] for g in _fetch_all("groups.list", {"isDeleted": False},
+                                            ["id"], "groups", uid)]
 
-    data = _api_call("retargeting.group.lists.list", [gids], uid)
-    rows = [r for r in data.get("lists", []) if not r.get("deleted")]
+    # The method takes the group IDs as one array — on a big account that array
+    # would blow the per-call item cap (413), so ask in chunks.
+    chunk = _list_page_size(uid)
+    rows = []
+    for i in range(0, len(gids), chunk):
+        data = _api_call("retargeting.group.lists.list", [gids[i:i + chunk]], uid)
+        rows.extend(r for r in data.get("lists", []) if not r.get("deleted"))
 
     if args.json:
         _output_json([{

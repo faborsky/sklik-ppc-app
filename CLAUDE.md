@@ -13,7 +13,7 @@ source venv/bin/activate && python sklik_cli.py <command> [flags]
 
 The implementation is a package under `sklik/`; `sklik_cli.py` is a thin entrypoint.
 
-- `sklik/api.py` — **engine**: config, account/token discovery, auth + session cache, the cross-session **request budget** (rate limiting), `_api_call`, and structured errors (`_fail` / `_fail_msg`).
+- `sklik/api.py` — **engine**: config, account/token discovery, auth + session cache, the cross-session **request budget** (rate limiting), `_api_call`, paging of list methods (`_fetch_all`, `_list_page_size`), and structured errors (`_fail` / `_fail_msg`).
 - `sklik/formatting.py` — CZK⇄haléře conversion + `_output_json`.
 - `sklik/reports.py` — two-step report helper (`createReport` → `readReport`).
 - `sklik/images.py` — image loading/base64 shared by combined ads and banners.
@@ -64,7 +64,8 @@ CLI accepts/displays **CZK**; the API uses haléře (100 = 1 Kč). Conversion is
 ## ⚠️ Critical for automation (read before scripting writes)
 
 - **Change ad text with `ad-replace`, NEVER `ad-remove` + `ad-create` by hand.** `ads.update` does an atomic delete-old + create-new server-side, so a failed validation keeps the original ad; a manual remove+create silently drops the ad when the create fails (this caused a real production incident). Combined/banner "replace" = create-first, then remove.
-- **Filtering is client-side.** The API ignores parent-entity filters (`campaign.ids`/`group.ids`/`status`) in restrictions; `--campaign-id`/`--group-id`/`--status` filter locally after fetch.
+- **Filtering is client-side.** The API ignores parent-entity filters (`campaign.ids`/`group.ids`/`status`) in restrictions; `--campaign-id`/`--group-id`/`--status` filter locally after fetch — over the **complete** set since v1.9.0 (before that the filter ran on a truncated first page).
+- **Listings and reports are fully paged — never add a hardcoded `limit`.** `*.list` returns no total count and silently gives you the first page only, so a fixed limit truncates every account bigger than that number (`campaigns` was capped at 100, `ads`/`groups`/`banners` at 500 until v1.9.0 — Jindra's own account already had 521 ads and showed 500). Read through **`api._fetch_all()`** (list methods) and **`_fetch_report`/`_fetch_listing_report`** (reports); both walk offsets to the end. Single-entity lookups (`{"ids": [x]}`, `limit: 1`) are the one legitimate fixed limit — never scan a whole listing to find one row.
 - **Audiences attach to groups via `retargeting-attach`/`retargeting-detach`/`retargeting-attached`** (v1.6.0; `retargeting.group.lists.*`). Attaching a **deleted** list fails with a bare `406 Bad values` — check `deleted` in `retargeting --json` first.
 - **Soft-delete quirks**: re-adding a removed display-targeting category → `409 entity_already_exists` (use `targeting-restore`); re-excluding a removed negative placement → `group_pattern_duplicity` (use `placement-exclude-restore`). `placements-excluded` cannot show the pattern text (API never returns it).
 - **Batch writes are all-or-nothing**; split payloads over the per-method cap (typically ≤100 for create/update/remove). Check caps with `api-limits`.

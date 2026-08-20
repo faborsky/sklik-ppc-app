@@ -9,7 +9,7 @@ import sys
 
 import requests
 
-from sklik.api import _api_call, _fail, _fail_msg
+from sklik.api import _api_call, _fail, _fail_msg, _fetch_all
 from sklik.formatting import _halere_to_czk, _format_money, _output_json
 from sklik.images import _load_image_b64, _image_ext
 
@@ -45,10 +45,8 @@ def cmd_banners(args: argparse.Namespace) -> None:
     """List image banners."""
     cols = ["id", "bannerName", "adStatus", "clickthruUrl",
             "height", "group.id", "group.name"]
-    data = _api_call("banners.list", [{"isDeleted": False}, {
-        "limit": 500, "offset": 0, "displayColumns": cols,
-    }], getattr(args, "user_id", None))
-    banners = data.get("banners", [])
+    banners = _fetch_all("banners.list", {"isDeleted": False}, cols, "banners",
+                         getattr(args, "user_id", None))
 
     # Client-side group filter
     if args.group_id:
@@ -108,10 +106,9 @@ def cmd_banner_download(args: argparse.Namespace) -> None:
     """
     cols = ["id", "bannerName", "adStatus", "image.url",
             "image.width", "image.height", "group.id", "group.name"]
-    data = _api_call("banners.list", [{"isDeleted": False}, {
-        "limit": 500, "offset": 0, "displayColumns": cols,
-    }], getattr(args, "user_id", None))
-    banners = [b for b in data.get("banners", [])
+    all_banners = _fetch_all("banners.list", {"isDeleted": False}, cols, "banners",
+                             getattr(args, "user_id", None))
+    banners = [b for b in all_banners
                if (b.get("group", {}).get("id") if isinstance(b.get("group"), dict)
                    else b.get("group.id")) == args.group_id]
 

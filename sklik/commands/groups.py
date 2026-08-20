@@ -6,7 +6,7 @@ import json
 import sys
 from datetime import datetime, timedelta
 
-from sklik.api import _api_call, _fail, _fail_msg, _is_sem_blocked
+from sklik.api import _api_call, _fail, _fail_msg, _fetch_all, _is_sem_blocked
 from sklik.formatting import (
     _czk_to_halere, _halere_to_czk, _format_money, _format_share,
     _format_stat_date, _output_json, _convert_stats_to_czk,
@@ -26,11 +26,8 @@ def cmd_groups(args: argparse.Namespace) -> None:
     cols = ["id", "name", "maxCpc", "status", "maxUserDailyImpressions",
             "campaign.id", "campaign.name"]
 
-    data = _api_call("groups.list", [restriction, {
-        "limit": 500, "offset": 0, "displayColumns": cols,
-    }], getattr(args, "user_id", None))
-
-    groups = data.get("groups", [])
+    groups = _fetch_all("groups.list", restriction, cols, "groups",
+                        getattr(args, "user_id", None))
 
     # Client-side campaign filter
     if args.campaign_id:

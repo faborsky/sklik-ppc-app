@@ -6,7 +6,7 @@ import json
 import sys
 from datetime import datetime, timedelta
 
-from sklik.api import _api_call, _fail, _fail_msg, _is_sem_blocked
+from sklik.api import _api_call, _fail, _fail_msg, _fetch_all, _is_sem_blocked
 from sklik.formatting import (
     _czk_to_halere, _halere_to_czk, _format_money, _format_share,
     _format_stat_date, _output_json, _convert_stats_to_czk,
@@ -157,16 +157,28 @@ def _format_schedule(schedule: object) -> list[str]:
 # Output helpers
 # ---------------------------------------------------------------------------
 
-def _get_campaign_type(campaign_id: int, user_id: int | None = None) -> str:
-    """Fetch campaign type (needed for campaigns.update with negativeKeywords)."""
+def _lookup_campaign_type(campaign_id: int, user_id: int | None = None) -> str | None:
+    """Campaign type by ID, or None if the campaign doesn't exist.
+
+    Asks for the ONE campaign (`ids` restriction) — never a whole-account
+    listing, which would both waste rows and miss campaigns beyond the page.
+    """
+    # _soft: an ID from another account comes back as 403 Access Denied, which
+    # for the caller means the same thing as "not here" — a clean message beats
+    # a raw API status.
     data = _api_call("campaigns.list", [
         {"ids": [campaign_id]},
         {"limit": 1, "offset": 0, "displayColumns": ["id", "type"]},
-    ], user_id)
+    ], user_id, _soft=True)
+    if data.get("status") not in (200, 206):
+        return None
     campaigns = data.get("campaigns", [])
-    if campaigns:
-        return campaigns[0].get("type", "fulltext")
-    return "fulltext"
+    return campaigns[0].get("type", "fulltext") if campaigns else None
+
+
+def _get_campaign_type(campaign_id: int, user_id: int | None = None) -> str:
+    """Campaign type (needed for campaigns.update), defaulting to fulltext."""
+    return _lookup_campaign_type(campaign_id, user_id) or "fulltext"
 
 
 # ---------------------------------------------------------------------------
@@ -180,11 +192,8 @@ def cmd_campaigns(args: argparse.Namespace) -> None:
     cols = ["id", "name", "status", "budget.dayBudget", "type",
             "adSelection", "createDate", "startDate", "endDate"]
 
-    data = _api_call("campaigns.list", [restriction, {
-        "limit": 100, "offset": 0, "displayColumns": cols,
-    }], getattr(args, "user_id", None))
-
-    campaigns = data.get("campaigns", [])
+    campaigns = _fetch_all("campaigns.list", restriction, cols, "campaigns",
+                           getattr(args, "user_id", None))
 
     # Client-side status filter (API doesn't support it in restriction)
     if args.status:
@@ -250,20 +259,13 @@ def cmd_campaign_create(args: argparse.Namespace) -> None:
 
 def cmd_campaign_update(args: argparse.Namespace) -> None:
     """Update a campaign."""
-    # Fetch current campaign to get required 'type' field
+    # campaigns.update always needs the 'type' field — fetch just this campaign
+    # (a whole-account listing used to be paged and silently missed campaign
+    # #101 onwards, failing the update with a bogus "not found").
     user_id = getattr(args, "user_id", None)
-    data = _api_call("campaigns.list", [
-        {"isDeleted": False},
-        {"limit": 100, "offset": 0, "displayColumns": ["id", "type"]}
-    ], user_id)
-    campaign_type = None
-    for c in data.get("campaigns", []):
-        if c.get("id") == args.campaign_id:
-            campaign_type = c.get("type")
-            break
+    campaign_type = _lookup_campaign_type(args.campaign_id, user_id)
     if not campaign_type:
-        print(f"ERROR: Campaign {args.campaign_id} not found.", file=sys.stderr)
-        sys.exit(1)
+        _fail_msg(f"Campaign {args.campaign_id} not found.", campaignId=args.campaign_id)
 
     update: dict = {"id": args.campaign_id, "type": campaign_type}
     if args.name:
