@@ -2,6 +2,42 @@
 
 Verze aplikace je v `sklik/__init__.py` (`__version__`, SemVer). Formát vychází z [Keep a Changelog](https://keepachangelog.com/). Datum je vydání dané verze.
 
+## [1.8.1] — 2026-08-20 — Cílení kampaní opraveno: geo, modifikátory zařízení, rozvrh 🎯
+
+Celá trojice přepínačů pro cílení kampaní posílala do API špatné datové tvary, takže
+**žádný z nich nikdy nefungoval** — vždycky skončil chybou `400 Bad arguments`. Nahlásil
+student kurzu AI First (`--regions`); zbylé dvě chyby vyplavala kontrola zbytku téhle
+rodiny přepínačů proti dokumentaci API a živé ověření přes `campaigns.check`.
+
+- **FIX: `--regions` posílalo holá čísla místo structů.** API čeká
+  `[{"predefinedId": 100001}, …]`, CLI posílalo `[100001]` → `400 Parameter
+  campaigns[0].regions[0] must be struct, not int`. Geo cílení tedy nešlo nastavit
+  vůbec — ani při `campaign-create`, ani při `campaign-update`.
+- **FIX: `--device-bids` posílalo desetinná čísla.** Hodnoty se parsovaly přes `float()`,
+  takže i `0:-30:-30:-100` odešlo jako `0.0/-30.0/…` → `400 … devicesPriceRatio.desktop
+  must be int, not double`. Nově jdou jako celá čísla; desetinný vstup (`-30.5`) CLI
+  odmítne s vysvětlením místo záhadné chyby z API.
+- **FIX: `--schedule-json` byl dokumentovaný v tvaru, který API odmítá.** README i nápověda
+  ukazovaly `{"daySchedule":[{"value":[…]}, …]}` — což je tvar, v jakém API rozvrh **vrací**,
+  ne v jakém ho přijímá (`400 … schedule must be array or nil, not struct`). Zápis chce
+  **7 polí po 24 hodnotách 0–100** (`[[0,…,100,…], …×7]`, týden od pondělí). CLI teď přijme
+  oba tvary a převede, `null` rozvrh smaže, a špatný počet dní/hodin odchytí lokálně
+  (dřív z toho bylo `406 campaign_invalid_schedule_size`).
+- **Zrušení geo cílení přes API nejde** — a `--regions ""` to dřív tiše slibovalo. API
+  odmítá prázdné pole (`400 Array cannot be empty`) i `nil` (`400 … regions cannot be nil`),
+  takže regiony jde odebrat jedině ve webovém rozhraní Skliku. CLI to teď řekne rovnou
+  místo odeslání payloadu, který vždycky spadne. Nastavení regionů navíc **nahrazuje
+  celou sadu**, což je nově v dokumentaci.
+- **Kontrola zbytku appky:** všechny ostatní zapisované payloady byly porovnány s oficiální
+  dokumentací API metod (structy vs. skaláry, int vs. double). Další chybu stejného druhu
+  nenašla — peněžní hodnoty jdou do API vždy přes `_czk_to_halere()` jako `int`, ostatní
+  číselné přepínače jsou `type=int`. Ověřen i tvar `--conditions-json`
+  (`retargeting-create`), který dosud nikde nebyl popsaný.
+- **Dokumentace:** `docs/api-notes.md` má nově u kampaňového cílení explicitně **zápisový vs.
+  čtecí tvar** všech tří polí (liší se u regionů i rozvrhu) a poznámku, že **`campaigns.check`
+  ověří payload zadarmo** — stejné vstupy jako create/update, žádný zápis, jedno volání.
+  Do `CLAUDE.md` přibylo pravidlo kontrolovat tvar payloadu při každé změně zápisu.
+
 ## [1.8.0] — 2026-08-11 — Win rate, granularita statistik a oprava zobrazení CTR 📊
 
 - **NOVÉ: `winRate` ve statistikách sestav** (`group-stats`) — podíl vyhraných aukcí.

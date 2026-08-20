@@ -8,7 +8,7 @@ Pokrývá kompletní životní cyklus *search* i *obsahových* kampaní — kamp
 
 ## 🆕 Co je nového
 
-Poslední verze **1.8.0** — statistiky umí **`winRate`** (podíl vyhraných aukcí, jen u sestav) a **`--granularity daily`** pro denní řady; přibyly sloupce `exhaustedBudgetShare`, `impressionMoney`/`clickMoney`, `avgCpt`, a `campaigns` teď ukazuje i rotaci reklam (`adSelection`). **Opraveno: CTR se v lidském výstupu tisklo 100× menší** (`0.01%` místo `0.73%`) — `--json` se nemění. Předtím **1.7.2** — oprava jednotek `conversionValue` (100× podhodnocená hodnota konverzí). Celá historie: **[CHANGELOG.md](CHANGELOG.md)**.
+Poslední verze **1.8.1** — **opraveno cílení kampaní**: `--regions` posílalo do API holá čísla místo structů (každý pokus o geo cílení končil chybou `regions[0] must be struct, not int`), `--device-bids` posílalo desetinná čísla místo celých (`must be int, not double`) a `--schedule-json` byl v dokumentaci v tvaru, který API odmítá. Díky za nahlášení patří studentovi kurzu AI First. Předtím **1.8.0** — statistiky umí **`winRate`** (podíl vyhraných aukcí, jen u sestav) a **`--granularity daily`** pro denní řady; přibyly sloupce `exhaustedBudgetShare`, `impressionMoney`/`clickMoney`, `avgCpt`, a `campaigns` teď ukazuje i rotaci reklam (`adSelection`). **Opraveno: CTR se v lidském výstupu tisklo 100× menší** (`0.01%` místo `0.73%`) — `--json` se nemění. Předtím **1.7.2** — oprava jednotek `conversionValue` (100× podhodnocená hodnota konverzí). Celá historie: **[CHANGELOG.md](CHANGELOG.md)**.
 
 > 💡 Chceš dostávat upozornění na nové verze? Na GitHubu: **Watch → Custom → Releases**.
 
@@ -149,9 +149,9 @@ Souhrn celého účtu **jedním voláním** — místo řetězení `account` + `
 
 **Cílení** (`campaign-create` / `campaign-update`):
 
-- `--regions` — ID regionů oddělená čárkou (prázdný řetězec při update geo cílení smaže)
-- `--device-bids` — modifikátory v % jako `desktop:mobile:tablet:other`, např. `0:-30:-30:-100`
-- `--schedule-json` (jen update) — `{"daySchedule":[{"value":[24 hodinových hodnot 0-100]}, …×7]}`, týden začíná pondělím
+- `--regions` — ID regionů oddělená čárkou (číselník: příkaz `regions`). Nastavení **nahrazuje celou sadu** regionů. Geo cílení **nejde přes API zrušit** — API odmítá prázdné pole i `nil`, smazat ho jde jen ve webovém rozhraní Skliku.
+- `--device-bids` — modifikátory v % jako `desktop:mobile:tablet:other`, např. `0:-30:-30:-100`. Musí to být **celá procenta** (API odmítá desetinná čísla).
+- `--schedule-json` (jen update) — **7 polí po 24 hodinových hodnotách 0–100**, týden začíná pondělím: `'[[0,0,…,100,100,…], …×7]'`. Hodnota `null` rozvrh smaže. (Starší tvar `{"daySchedule":[{"value":[…]}, …]}` — v jakém API rozvrh *vrací* — CLI přijme taky a převede.)
 - `--ad-selection` — rotace inzerátů (`adSelection`): `weighted` (preferuj vyšší CTR, výchozí), `random` (rovnoměrně — čistý A/B test kreativ), `cpa` (nižší CPA), `cos` (nižší CTR)
 
 ### Sestavy (ad groups)
@@ -265,7 +265,7 @@ Konverze = pojmenovaná definice cílové akce (nákup, registrace…) a její h
 | Příkaz | Klíčové přepínače |
 |--------|-------------------|
 | `retargeting` | `--json` |
-| `retargeting-create` | `--name`, `--membership` (dny), `--description`, `--use-historic`, `--take-all-users`, `--conditions-json`, `--json` |
+| `retargeting-create` | `--name`, `--membership` (dny), `--description`, `--use-historic`, `--take-all-users`, `--conditions-json` (tvar: `[{"conditions":[{"type":"contains","value":"/dekujeme"}]}]`), `--json` |
 | `retargeting-update` | `--list-id`, `--name`, `--membership`, `--description`, `--json` |
 | `retargeting-remove` | `--list-id`, `--confirm`, `--json` |
 | `retargeting-attach` | `--list-id`, `--group-id`, `--json` — napojí publikum na sestavu jako cílení |

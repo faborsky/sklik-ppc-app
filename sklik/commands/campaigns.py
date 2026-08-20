@@ -19,46 +19,129 @@ from sklik.reports import _fetch_report, stat_columns
 # Targeting helpers (campaign regions / device bids / schedule)
 # ---------------------------------------------------------------------------
 
-def _parse_regions(value: str | None) -> list[int] | None:
-    """Parse a comma-separated list of region IDs (empty string clears them)."""
+# Sentinel: --schedule-json not used at all (None means "clear the schedule").
+_SCHEDULE_UNSET = object()
+
+def _parse_regions(value: str | None) -> list[dict] | None:
+    """Parse a comma-separated list of region IDs into the API's struct form.
+
+    The API takes `regions` as an array of structs `[{"predefinedId": id}, …]`
+    — bare ints are rejected with `400 … regions[0] must be struct, not int`.
+    It also refuses an empty array AND nil, so geo targeting cannot be cleared
+    through the API at all (web UI only) — we fail loudly instead of sending a
+    payload that always 400s.
+    """
     if value is None:
         return None
     value = value.strip()
     if not value:
-        return []  # explicit clear
+        _fail_msg("--regions cannot be empty: the API rejects both an empty array "
+                  "and nil, so geo targeting can't be cleared via the API "
+                  "(remove it in the Sklik web UI). Pass region IDs to change it.")
     try:
-        return [int(x.strip()) for x in value.split(",") if x.strip()]
+        ids = [int(x.strip()) for x in value.split(",") if x.strip()]
     except ValueError:
-        print("ERROR: --regions must be comma-separated integers (region IDs).", file=sys.stderr)
-        sys.exit(1)
+        _fail_msg("--regions must be comma-separated integers (region IDs, see the `regions` command).")
+    if not ids:
+        _fail_msg("--regions contains no region IDs.")
+    return [{"predefinedId": i} for i in ids]
 
 
 def _parse_device_bids(value: str | None) -> dict | None:
-    """Parse 'desktop:mobile:tablet:other' percentage modifiers into a struct."""
+    """Parse 'desktop:mobile:tablet:other' percentage modifiers into a struct.
+
+    Values MUST be whole percents — the API rejects floats
+    (`400 … devicesPriceRatio.desktop must be int, not double`).
+    """
     if value is None:
         return None
     parts = value.split(":")
     if len(parts) != 4:
-        print("ERROR: --device-bids must be 'desktop:mobile:tablet:other' "
-              "(e.g. 0:-30:-30:-100).", file=sys.stderr)
-        sys.exit(1)
+        _fail_msg("--device-bids must be 'desktop:mobile:tablet:other' "
+                  "(e.g. 0:-30:-30:-100).")
     try:
-        desktop, mobile, tablet, other = (float(p) for p in parts)
+        nums = [float(p) for p in parts]
     except ValueError:
-        print("ERROR: --device-bids values must be numbers (percent modifiers).", file=sys.stderr)
-        sys.exit(1)
+        _fail_msg("--device-bids values must be numbers (percent modifiers).")
+    if any(n != int(n) for n in nums):
+        _fail_msg("--device-bids values must be whole percents — the API rejects "
+                  "decimals (e.g. use -30, not -30.5).")
+    desktop, mobile, tablet, other = (int(n) for n in nums)
     return {"desktop": desktop, "mobile": mobile, "tablet": tablet, "other": other}
 
 
+def _parse_schedule(value: str | None) -> object:
+    """Parse --schedule-json into the API's shape: 7 arrays of 24 hourly ints.
+
+    The API takes `schedule` as an array of 7 day-arrays (week starts Monday),
+    each with 24 values, or nil to clear it. The legacy
+    `{"daySchedule":[{"value":[…]}, …]}` form (which the API rejects) is
+    accepted here and normalised, since older docs advertised it.
+
+    Returns `_SCHEDULE_UNSET` when the flag wasn't used, `None` for an explicit
+    clear (JSON `null`), otherwise the normalised 7×24 array.
+    """
+    if value is None:
+        return _SCHEDULE_UNSET
+    try:
+        parsed = json.loads(value)
+    except json.JSONDecodeError as e:
+        _fail_msg(f"Invalid --schedule-json: {e}")
+
+    if parsed is None:
+        return None  # explicit clear — the API accepts nil for schedule
+
+    # Legacy/read shape: {"daySchedule": [{"value": [...]}, ...]}
+    if isinstance(parsed, dict):
+        days = parsed.get("daySchedule")
+        if not isinstance(days, list):
+            _fail_msg("--schedule-json must be an array of 7 day-arrays "
+                      "(24 hourly values each), or null to clear.")
+        parsed = [d.get("value") if isinstance(d, dict) else d for d in days]
+
+    if not isinstance(parsed, list) or len(parsed) != 7:
+        _fail_msg("--schedule-json must contain exactly 7 days (week starts Monday); "
+                  "e.g. [[100,100,…×24], …×7]. Use null to clear the schedule.")
+
+    normalised = []
+    for i, day in enumerate(parsed):
+        if isinstance(day, dict):  # {"value": [...]} per day
+            day = day.get("value")
+        if not isinstance(day, list) or len(day) != 24:
+            _fail_msg(f"--schedule-json: day {i + 1} must be an array of 24 hourly values (0-100).")
+        try:
+            hours = [int(h) for h in day]
+        except (TypeError, ValueError):
+            _fail_msg(f"--schedule-json: day {i + 1} contains a non-numeric hourly value.")
+        if any(h < 0 or h > 100 for h in hours):
+            _fail_msg(f"--schedule-json: day {i + 1} has values outside the 0-100 range.")
+        normalised.append(hours)
+    return normalised
+
+
 def _format_schedule(schedule: object) -> list[str]:
-    """Summarise a campaign schedule (7×24 hourly %) into per-day active windows."""
-    if not isinstance(schedule, dict):
+    """Summarise a campaign schedule (7×24 hourly %) into per-day active windows.
+
+    The API returns `schedule` as an array of 7 day-arrays (empty array = no
+    schedule); the legacy `{"daySchedule": …}` struct is still tolerated.
+    """
+    if isinstance(schedule, dict):
+        days = schedule.get("daySchedule", [])
+    elif isinstance(schedule, list):
+        days = schedule
+    else:
+        days = []
+    if not days:
         return ["(none — runs all the time)"]
-    days = schedule.get("daySchedule", [])
     names = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
     lines = []
     for i, day in enumerate(days[:7]):
-        hours = day.get("value", []) if isinstance(day, dict) else []
+        if isinstance(day, dict):
+            hours = day.get("value", [])
+        elif isinstance(day, list):
+            hours = day
+        else:
+            hours = []
         active = [h for h, v in enumerate(hours) if v and v > 0]
         if not active:
             summary = "off"
@@ -195,11 +278,9 @@ def cmd_campaign_update(args: argparse.Namespace) -> None:
     device_bids = _parse_device_bids(getattr(args, "device_bids", None))
     if device_bids is not None:
         update["devicesPriceRatio"] = device_bids
-    if getattr(args, "schedule_json", None):
-        try:
-            update["schedule"] = json.loads(args.schedule_json)
-        except json.JSONDecodeError as e:
-            _fail_msg(f"Invalid --schedule-json: {e}")
+    schedule = _parse_schedule(getattr(args, "schedule_json", None))
+    if schedule is not _SCHEDULE_UNSET:
+        update["schedule"] = schedule  # None = explicit clear (API accepts nil)
     if getattr(args, "ad_selection", None):
         update["adSelection"] = args.ad_selection
 

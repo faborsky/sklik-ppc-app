@@ -38,7 +38,7 @@ CLI accepts/displays **CZK**; the API uses haléře (100 = 1 Kč). Conversion is
 **Full flag reference + examples: [README.md](README.md).** Index:
 
 - **Overview:** `account`, `api-limits`, `pulse` (warns when the window's stats aren't complete yet), `credit`, `regions`, `autotagging`, `autotagging-update`
-- **Campaigns:** `campaigns`, `campaign-create/update/remove/restore/stats/targeting` — targeting: `--regions`, `--device-bids`, `--schedule-json`, `--ad-selection {weighted,random,cpa,cos}`
+- **Campaigns:** `campaigns`, `campaign-create/update/remove/restore/stats/targeting` — targeting: `--regions` (replaces the whole set; **cannot be cleared via the API**), `--device-bids` (whole percents only), `--schedule-json` (7×24 array, `null` clears), `--ad-selection {weighted,random,cpa,cos}`
 - **Groups:** `groups`, `group-create/update/remove/restore/stats` — `--max-daily-impression` = frequency cap (the campaign-level cap in the web UI is invisible to the API, and the group cap wins where both are set); `group-stats` is the only entity returning `winRate`
 - **Keywords:** `keywords`, `keyword-create`, `keyword-create-batch`, `keyword-update/remove/restore/stats`, **`keyword-set`** (declarative upsert; `--remove-others` = full sync)
 - **Ads:** `ads`, `ad-create`, `combined-create`, `ad-update` (status only), **`ad-replace`** (safe atomic text change), `ad-remove`, `ad-restore`, `ad-stats`
@@ -68,6 +68,7 @@ CLI accepts/displays **CZK**; the API uses haléře (100 = 1 Kč). Conversion is
 - **Audiences attach to groups via `retargeting-attach`/`retargeting-detach`/`retargeting-attached`** (v1.6.0; `retargeting.group.lists.*`). Attaching a **deleted** list fails with a bare `406 Bad values` — check `deleted` in `retargeting --json` first.
 - **Soft-delete quirks**: re-adding a removed display-targeting category → `409 entity_already_exists` (use `targeting-restore`); re-excluding a removed negative placement → `group_pattern_duplicity` (use `placement-exclude-restore`). `placements-excluded` cannot show the pattern text (API never returns it).
 - **Batch writes are all-or-nothing**; split payloads over the per-method cap (typically ≤100 for create/update/remove). Check caps with `api-limits`.
+- **The API is strict about payload shapes and scalar types** — a struct where it wants a struct, an `int` where it wants an `int`. A bare int in an array of structs (`regions`) or a float in an int field (`devicesPriceRatio`) is a hard `400`, not a coercion. When adding or changing a write payload, verify the shape against [docs/api-notes.md](docs/api-notes.md) / the DRAK docs — and for campaigns use **`campaigns.check`** (and `ads.check` for ads): same payload, no writes, one request. This class of bug shipped undetected in `--regions` / `--device-bids` / `--schedule-json` until v1.8.1.
 
 Full API behaviour, quirks, rate-limit internals and status codes: **[docs/api-notes.md](docs/api-notes.md)**.
 

@@ -225,9 +225,9 @@ def main() -> None:
     p.add_argument("--day-budget", type=float, required=True, help="Day budget in CZK")
     p.add_argument("--type", default="fulltext", choices=["fulltext", "context", "product"], help="Campaign type")
     p.add_argument("--status", choices=["active", "suspend"], help="Initial status")
-    p.add_argument("--regions", help="Comma-separated region IDs for geo targeting")
+    p.add_argument("--regions", help="Comma-separated region IDs for geo targeting (see the `regions` command)")
     p.add_argument("--device-bids", dest="device_bids",
-                   help="Device bid modifiers 'desktop:mobile:tablet:other' in %% (e.g. 0:-30:-30:-100)")
+                   help="Device bid modifiers 'desktop:mobile:tablet:other' in whole %% (e.g. 0:-30:-30:-100)")
     p.add_argument("--ad-selection", dest="ad_selection",
                    choices=["weighted", "random", "cpa", "cos"],
                    help="Ad rotation: weighted=prefer higher CTR (default), "
@@ -241,11 +241,12 @@ def main() -> None:
     p.add_argument("--name", help="New name")
     p.add_argument("--day-budget", type=float, help="New day budget in CZK")
     p.add_argument("--status", choices=["active", "suspend"], help="New status")
-    p.add_argument("--regions", help="Comma-separated region IDs (empty string clears geo targeting)")
+    p.add_argument("--regions", help="Comma-separated region IDs (geo targeting cannot be cleared via the API)")
     p.add_argument("--device-bids", dest="device_bids",
-                   help="Device bid modifiers 'desktop:mobile:tablet:other' in %% (e.g. 0:-30:-30:-100)")
+                   help="Device bid modifiers 'desktop:mobile:tablet:other' in whole %% (e.g. 0:-30:-30:-100)")
     p.add_argument("--schedule-json", dest="schedule_json",
-                   help="Schedule as JSON: {\"daySchedule\":[{\"value\":[24 hourly 0-100]}, ...×7]}")
+                   help="Schedule as JSON: 7 day-arrays of 24 hourly values 0-100, week starts Monday "
+                        "(e.g. '[[100,...×24], ...×7]'); 'null' clears the schedule")
     p.add_argument("--ad-selection", dest="ad_selection",
                    choices=["weighted", "random", "cpa", "cos"],
                    help="Ad rotation: weighted=prefer higher CTR (default), "
@@ -608,7 +609,10 @@ def main() -> None:
     p.add_argument("--use-historic", action="store_true", help="Include historic URL requests")
     p.add_argument("--take-all-users", dest="take_all_users", action="store_const", const=True,
                    default=None, help="Capture all visitors (default unless --conditions-json given)")
-    p.add_argument("--conditions-json", help='URL condition groups as JSON (advanced)')
+    p.add_argument("--conditions-json",
+                   help='URL condition groups as JSON (advanced): '
+                        '\'[{"conditions":[{"type":"contains","value":"/dekujeme"}]}]\' — '
+                        'type: contains/not_contains/equals/not_equals/starts/not_starts/ends/not_ends')
     p.add_argument("--json", **json_kwargs)
 
     # --- retargeting-update ---
