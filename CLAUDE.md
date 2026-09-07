@@ -35,7 +35,7 @@ Shared mutable state (`ACTIVE_ACCOUNT`, `_JSON_OUTPUT`, session) lives in `api.p
 
 CLI accepts/displays **CZK**; the API uses haléře (100 = 1 Kč). Conversion is automatic both ways.
 
-**Fénix (Nákupy) is the exception**: it sends plain CZK floats, so the `sklik/formatting.py` helpers must NOT touch those values. One field bucks even that — the campaign's `exhaustedDayBudget` is in haléře while its `budget.dayBudget` is in CZK.
+**Fénix (Nákupy) is mostly the exception**: stats and shop-item CPCs are plain CZK floats, so the `sklik/formatting.py` helpers must NOT touch them. But `/nakupy/campaigns/` proxies DRAK, so **both** `budget.dayBudget` and `exhaustedDayBudget` there are haléře — the OpenAPI spec claims CZK for `dayBudget` and is wrong (verified against a live account through both APIs).
 
 ## Commands (93, grouped)
 
@@ -74,7 +74,7 @@ CLI accepts/displays **CZK**; the API uses haléře (100 = 1 Kč). Conversion is
 - **Audiences attach to groups via `retargeting-attach`/`retargeting-detach`/`retargeting-attached`** (v1.6.0; `retargeting.group.lists.*`). Attaching a **deleted** list fails with a bare `406 Bad values` — check `deleted` in `retargeting --json` first.
 - **Soft-delete quirks**: re-adding a removed display-targeting category → `409 entity_already_exists` (use `targeting-restore`); re-excluding a removed negative placement → `group_pattern_duplicity` (use `placement-exclude-restore`). `placements-excluded` cannot show the pattern text (API never returns it).
 - **Batch writes are all-or-nothing**; split payloads over the per-method cap (typically ≤100 for create/update/remove). Check caps with `api-limits`.
-- **Fénix `maxCpcMultiplier` is a multiplier, DRAK `devicesPriceRatio` is a modifier.** Fénix: 100 = no change, 120 = +20 %. DRAK: 0 = no change, 20 = +20 %. Copying a number from `nakupy-campaigns` into `campaign-update --device-bids` without subtracting 100 sets a wildly wrong bid. Only device multipliers are writable at all — web and auction-type ones are web-UI only, in both APIs.
+- **Fénix `maxCpcMultiplier` is a signed modifier, exactly like DRAK `devicesPriceRatio`** — 0 = no change, `+20` = +20 %, `-100` = off; the value copies from `nakupy-campaigns` into `campaign-update --device-bids` unconverted. The name and the OpenAPI spec say "multiplier, 100 = no change" and are wrong (live values are small signed deltas, and a multiplier cannot be `-100`). **Placements without a modifier are omitted from the response entirely** — absence means "no change", so never test for a neutral `100`. Only device modifiers are writable at all — web and auction-type ones are web-UI only, in both APIs.
 - **The API is strict about payload shapes and scalar types** — a struct where it wants a struct, an `int` where it wants an `int`. A bare int in an array of structs (`regions`) or a float in an int field (`devicesPriceRatio`) is a hard `400`, not a coercion. When adding or changing a write payload, verify the shape against [docs/api-notes.md](docs/api-notes.md) / the DRAK docs — and for campaigns use **`campaigns.check`** (and `ads.check` for ads): same payload, no writes, one request. This class of bug shipped undetected in `--regions` / `--device-bids` / `--schedule-json` until v1.8.1.
 
 Full API behaviour, quirks, rate-limit internals and status codes: **[docs/api-notes.md](docs/api-notes.md)**.

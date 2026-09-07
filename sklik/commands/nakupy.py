@@ -5,13 +5,22 @@ These go through `sklik/fenix.py` — a different API and a different token from
 every other command here. Each call needs a `premiseId` (shop): `--premise-id`
 or `SKLIK_FENIX_PREMISE` in .env.
 
-Two conventions differ from the DRAK commands and are easy to get wrong:
+Money units are NOT uniform here, and the OpenAPI spec is not a reliable
+guide — `/nakupy/campaigns/` proxies DRAK's own campaign storage, so that
+endpoint keeps DRAK conventions while the rest of Fénix does not:
 
-* **Money is plain CZK, not haléře** — never run these values through
-  `_format_money` / `_convert_stats_to_czk`, which would divide by 100.
-* **`maxCpcMultiplier` is a multiplier in percent, not a signed modifier** —
-  100 means "no change", 120 means +20 %. DRAK's `--device-bids` uses the
-  opposite convention (0 = no change), so the two are 100 points apart.
+* **Statistics and shop-item CPCs are plain CZK floats** — never run those
+  through `_format_money` / `_convert_stats_to_czk`, which would divide by 100.
+* **`budget.dayBudget` is haléře**, like DRAK — as is its sibling
+  `exhaustedDayBudget`. The spec calls it CZK; live data (the same campaign
+  read through both APIs) says otherwise, so it gets divided by 100.
+* **`maxCpcMultiplier` is a signed percentage modifier, not a multiplier** —
+  0 (absent) means "no change", +20 means +20 %, -100 turns the placement off.
+  Same convention as DRAK's `devicesPriceRatio` / `--device-bids`, so the two
+  are copied across as-is. Despite the name and the spec's "multiplier in
+  percent", live values are small signed deltas, and only placements with a
+  modifier SET are returned at all — an untouched device is simply missing
+  from the array, never present as 100.
 """
 from __future__ import annotations
 
@@ -61,12 +70,16 @@ def _ratio(numerator: float | None, denominator: float | None) -> str:
     return f"{(numerator or 0) / denominator * 100:.2f}%"
 
 
-def _multiplier(value: int | None) -> str:
-    """Render a Fénix `maxCpcMultiplier`: 100 % = no change, 120 % = +20 %."""
+def _modifier(value: int | float | None) -> str:
+    """Render a Fénix `maxCpcMultiplier` — a signed percentage modifier.
+
+    Same convention as DRAK's `devicesPriceRatio`: 0 = no change, +20 = +20 %,
+    -100 = placement off. Only placements with a modifier set are returned, so
+    a missing row means "no change", not zero traffic.
+    """
     if value is None:
         return "—"
-    delta = value - 100
-    return f"{value} %" + (f" ({delta:+d} %)" if delta else " (beze změny)")
+    return f"{value:+g} %" if value else "0 % (beze změny)"
 
 
 # ---------------------------------------------------------------------------
@@ -128,19 +141,21 @@ def cmd_nakupy_campaigns(args: argparse.Namespace) -> None:
         return
     for c in camps:
         budget = (c.get("budget") or {}).get("dayBudget")
-        # dayBudget is CZK here; the campaign's `exhaustedDayBudget` is haléře.
+        # dayBudget is haléře here (so is `exhaustedDayBudget`) — this endpoint
+        # proxies DRAK, unlike the CZK floats in stats and shop-items.
         print(f"Campaign {c.get('id')}  status={c.get('status')}  "
-              f"dayBudget={budget if budget is not None else '—'} Kč  "
+              f"dayBudget={_czk(budget / 100) if budget is not None else '—'}  "
               f"bidding={c.get('zboziBiddingType', '—')}")
         for label, rows, key in (("web ", c.get("websites"), "webType"),
                                  ("dev ", c.get("devices"), "deviceType"),
                                  ("type", c.get("products"), "productType")):
             for r in rows or []:
                 print(f"  {label} {str(r.get(key)):10} "
-                      f"{_multiplier(r.get('maxCpcMultiplier'))}")
-    print("\nMultiplier 100 % = no change. Only DEVICE multipliers are writable "
-          "via API (campaign-update --device-bids, where 0 = no change); "
-          "web and auction-type multipliers are web-UI only.")
+                      f"{_modifier(r.get('maxCpcMultiplier'))}")
+    print("\nModifiers are signed percentages (0 = no change), the same "
+          "convention as campaign-update --device-bids; a placement with no "
+          "modifier set is not listed at all. Only DEVICE modifiers are "
+          "writable via API — web and auction-type ones are web-UI only.")
 
 
 # ---------------------------------------------------------------------------

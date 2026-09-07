@@ -2,6 +2,39 @@
 
 Verze aplikace je v `sklik/__init__.py` (`__version__`, SemVer). Formát vychází z [Keep a Changelog](https://keepachangelog.com/). Datum je vydání dané verze.
 
+## [1.10.1] — 2026-09-07 — oprava jednotek u nákupních kampaní (rozpočet 100× vyšší, obrácené modifikátory)
+
+Verze 1.10.0 se u dvou polí spolehla na OpenAPI specifikaci Fénixu a ta lže.
+Ověřeno proti živému účtu (stejná kampaň přečtená naráz přes Fénix i DRAK) —
+díky za doložení patří opět [ArkAngelMichael](https://www.arkangelmichael.cz/).
+Týká se to jenom výpisu `nakupy-campaigns`; statistiky, feed ani položky
+obchodu se nemění.
+
+### Opraveno
+
+- **`nakupy-campaigns` ukazoval denní rozpočet 100× vyšší** — kampaň s 250 Kč
+  se vypsala jako 25 000 Kč. `budget.dayBudget` je v haléřích, přesně jako
+  všude jinde ve Skliku (a jako sousední `exhaustedDayBudget`); specifikace u
+  něj tvrdí koruny a sama si dvě schémata dál protiřečí („in hellers").
+  Endpoint nákupních kampaní podává hodnotu rovnou z DRAKu: Fénix vrátí
+  `25000` a DRAK pro tutéž kampaň taky `25000` haléřů = 250 Kč.
+- **Modifikátory nabídek se tiskly obráceně.** `maxCpcMultiplier` navzdory
+  jménu **není** násobič se základnou 100 %, ale znaménkové procento se stejnou
+  konvencí jako DRAK: `0` = beze změny, `+20` = +20 %, `-100` = umístění
+  vypnuté. Živá data (`seznam +10`, `zbozi -25`, `tablet -50`,
+  `multimedia -100`) sedí 1:1 na `devicesPriceRatio` téže kampaně v DRAKu —
+  a násobič nikdy nemůže být `-100`. Hodnota se tedy mezi `nakupy-campaigns`
+  a `campaign-update --device-bids` **přepisuje beze změny**; dřívější rada
+  odečíst 100 by nastavila úplně jinou nabídku.
+- **Umístění bez nastaveného modifikátoru se v odpovědi vůbec nevrací** — není
+  tam s hodnotou `100`, prostě chybí. Dokumentace i výpis to teď říkají
+  nahlas, aby se nikdo (ani agent) neptal na „neutrální hodnotu", která nikdy
+  nepřijde.
+
+Poučení do dokumentace: u Fénixu má přednost živá odpověď před specifikací —
+`/nakupy/campaigns/` je průchodka na DRAK a drží jeho konvence, zatímco
+statistiky a CPC u položek feedu opravdu jsou koruny.
+
 ## [1.10.0] — 2026-09-07 — API Fénix: Seznam Nákupy (feed, diagnostika, statistiky podle umístění) 🛒
 
 U nákupních kampaní byla appka až dosud poloslepá: DRAK, na kterém stojí zbytek
