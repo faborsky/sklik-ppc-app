@@ -2,6 +2,62 @@
 
 Verze aplikace je v `sklik/__init__.py` (`__version__`, SemVer). Formát vychází z [Keep a Changelog](https://keepachangelog.com/). Datum je vydání dané verze.
 
+## [1.10.0] — 2026-09-07 — API Fénix: Seznam Nákupy (feed, diagnostika, statistiky podle umístění) 🛒
+
+U nákupních kampaní byla appka až dosud poloslepá: DRAK, na kterém stojí zbytek
+CLI, vidí u Seznam Nákupů (dřív Zboží.cz) jen agregát na úrovni kampaně a sestavy
+— ne feed, ne jednotlivé produkty, ne rozpad výkonu podle umístění. Diagnostika
+typu „proč nám ta nákupovka nejede" tak končila ve webovém rozhraní.
+
+Nová skupina příkazů **Nákupy / feed** to doplňuje přes **API Fénix**
+(`api.sklik.cz/v1`) — novější REST rozhraní Seznamu určené právě pro Nákupy.
+
+**Za nápad, průzkum API a první funkční implementaci děkuji uživateli
+[ArkAngelMichael](https://www.arkangelmichael.cz/)** — přišel s hotovým modulem
+i s poznatky o tom, jak se Fénix chová v praxi (asynchronní reporty, 425 „ještě
+se to peče"). Verze v appce je jeho práce přepsaná do konvencí projektu a
+prověřená proti OpenAPI specifikaci Fénixu.
+
+### Přidáno
+
+- **`feed-status`** — URL feedu, čas posledního úspěšného importu, kolikrát denně
+  se smí stahovat.
+- **`feed-diagnostics`** — zdraví nabídek: kolik je OK / s chybou / neviditelných
+  / „lze vylepšit" / bez kategorie (počty i procenta). Servírování blokují jen
+  *chyba* a *neviditelné*; „lze vylepšit" znamená chybějící nepovinná data.
+- **`nakupy-campaigns`** — nákupní kampaně **včetně modifikátorů nabídek** podle
+  webu (seznam / zbozi / partner), zařízení a typu aukce (detail / nabídka).
+  Tyhle hodnoty přes DRAK vůbec nejdou přečíst.
+- **`nakupy-stats`** — statistiky rozpadlé přes
+  `--split webType,deviceType,productType,conversionId` nebo `--by-category`,
+  s `--granularity`. Asynchronní report (POST → čekání na `/sklik/reports/{id}`),
+  vrací i souhrnný řádek `sums`.
+- **`shop-items`** — položky feedu: párování na produkt, CPC po položce a
+  s `--product-detail` i pozice v aukci a CPC potřebná na výhru TOP pozice.
+  `--all` prochází celý feed přes kurzorové stránkování.
+- **`sklik/fenix.py`** — samostatný engine: vlastní autentizace
+  (`SKLIK_FENIX_REFRESH_TOKEN` → hodinový access token v
+  `.fenix_cache_<account>.json`), per-účet stejně jako DRAK, podpora `--user-id`
+  (Fénix bere spravovaný účet už při vydání tokenu), kurzorové stránkování,
+  vlastní odstup mezi voláními a backoff na 429.
+
+### Na co si dát pozor (jiné konvence než zbytek appky)
+
+- **Peníze jsou v Kč, ne v haléřích.** Fénix posílá částky jako desetinná čísla
+  v korunách — nesmí se hnát přes `_format_money` / `_convert_stats_to_czk`.
+  Výjimka uvnitř Fénixu: `exhaustedDayBudget` u kampaně je v haléřích.
+- **`maxCpcMultiplier` je násobič v procentech, ne přirážka.** 100 % = beze změny,
+  120 % = +20 %. DRAK má u `campaign-update --device-bids` opačnou konvenci
+  (0 = beze změny) — mezi oběma je posun o 100 bodů. Appka to při výpisu
+  převádí a píše obojí.
+- Modifikátory podle **webu a typu aukce jde přes API jen číst** — zapsat je lze
+  pouze ve webovém rozhraní Skliku. Podle **zařízení** zapisuje DRAK
+  (`campaign-update --device-bids`).
+- CTR a PNO se v lidském výstupu **dopočítávají** z kliků/impresí a útraty/hodnoty
+  konverzí; sloupce `ctr` a `pno` z API jdou nedotčené do `--json`. Fénix nikde
+  nedokumentuje, jestli jsou to zlomky nebo procenta, a špatný odhad by je
+  posunul 100× (přesně ta chyba, co v appce byla u `ctr` a `conversionValue`).
+
 ## [1.9.0] — 2026-08-20 — Výpisy vrací kompletní data (konec tichého usekávání) 📄
 
 Appka četla z API vždycky jen **první stránku** a tvářila se, že je to celý účet.

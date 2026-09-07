@@ -8,7 +8,7 @@ Pokrývá kompletní životní cyklus *search* i *obsahových* kampaní — kamp
 
 ## 🆕 Co je nového
 
-Poslední verze **1.9.0** — **výpisy vrací kompletní data**. `campaigns` bralo z API jen prvních 100 kampaní (a `--status` filtroval až nad touhle useknutou stovkou), `groups`/`ads`/`banners` 500 řádků — větší účet tak tiše přišel o zbytek a nikde to nebylo vidět. Nově se všechny výpisy i reporty stránkují až do konce. Díky za nahlášení patří studentovi kurzu AI First. Předtím **1.8.1** — **opraveno cílení kampaní**: `--regions` posílalo do API holá čísla místo structů (každý pokus o geo cílení končil chybou `regions[0] must be struct, not int`), `--device-bids` posílalo desetinná čísla místo celých (`must be int, not double`) a `--schedule-json` byl v dokumentaci v tvaru, který API odmítá. Díky za nahlášení patří studentovi kurzu AI First. Předtím **1.8.0** — statistiky umí **`winRate`** (podíl vyhraných aukcí, jen u sestav) a **`--granularity daily`** pro denní řady; přibyly sloupce `exhaustedBudgetShare`, `impressionMoney`/`clickMoney`, `avgCpt`, a `campaigns` teď ukazuje i rotaci reklam (`adSelection`). **Opraveno: CTR se v lidském výstupu tisklo 100× menší** (`0.01%` místo `0.73%`) — `--json` se nemění. Předtím **1.7.2** — oprava jednotek `conversionValue` (100× podhodnocená hodnota konverzí). Celá historie: **[CHANGELOG.md](CHANGELOG.md)**.
+Poslední verze **1.10.0** — nová skupina příkazů **Nákupy / feed (API Fénix)**: `feed-status`, `feed-diagnostics`, `nakupy-campaigns`, `nakupy-stats`, `shop-items`. U nákupních kampaní (Seznam Nákupy, dřív Zboží.cz) vidí DRAK jen agregát na kampani a sestavě — feed, jednotlivé produkty ani rozpad výkonu podle umístění (Seznam × Zboží, typ aukce, zařízení) neukáže vůbec. To teď doplňuje API Fénix; potřebuje vlastní token v `.env`. **Za nápad i za první implementaci děkuji uživateli ArkAngelMichael.** Předtím **1.9.0** — **výpisy vrací kompletní data**. `campaigns` bralo z API jen prvních 100 kampaní (a `--status` filtroval až nad touhle useknutou stovkou), `groups`/`ads`/`banners` 500 řádků — větší účet tak tiše přišel o zbytek a nikde to nebylo vidět. Nově se všechny výpisy i reporty stránkují až do konce. Díky za nahlášení patří studentovi kurzu AI First. Předtím **1.8.1** — **opraveno cílení kampaní**: `--regions` posílalo do API holá čísla místo structů (každý pokus o geo cílení končil chybou `regions[0] must be struct, not int`), `--device-bids` posílalo desetinná čísla místo celých (`must be int, not double`) a `--schedule-json` byl v dokumentaci v tvaru, který API odmítá. Díky za nahlášení patří studentovi kurzu AI First. Předtím **1.8.0** — statistiky umí **`winRate`** (podíl vyhraných aukcí, jen u sestav) a **`--granularity daily`** pro denní řady; přibyly sloupce `exhaustedBudgetShare`, `impressionMoney`/`clickMoney`, `avgCpt`, a `campaigns` teď ukazuje i rotaci reklam (`adSelection`). **Opraveno: CTR se v lidském výstupu tisklo 100× menší** (`0.01%` místo `0.73%`) — `--json` se nemění. Předtím **1.7.2** — oprava jednotek `conversionValue` (100× podhodnocená hodnota konverzí). Celá historie: **[CHANGELOG.md](CHANGELOG.md)**.
 
 > 💡 Chceš dostávat upozornění na nové verze? Na GitHubu: **Watch → Custom → Releases**.
 
@@ -345,6 +345,27 @@ Jeden denní rozpočet sdílený více kampaněmi. Přiřazení kampaní se ří
 | `budget-update` | `--budget-id`, `--name`, `--day-budget`, `--add-campaign-ids`, `--remove-campaign-ids`, `--remove-all-campaigns`, `--json` |
 | `budget-remove` | `--budget-id`, `--confirm`, `--json` |
 
+### Nákupy / feed (API Fénix)
+
+Seznam Nákupy (dřív Zboží.cz) — feed, diagnostika položek, modifikátory nabídek a statistiky rozpadlé podle umístění. Jede přes **API Fénix** (`api.sklik.cz/v1`), což je jiné rozhraní a **jiný token** než zbytek CLI:
+
+- Vygeneruj si **Fénix refresh token** ve webovém rozhraní Skliku a vlož ho do `.env` jako `SKLIK_FENIX_REFRESH_TOKEN` (pro pojmenovaný účet `SKLIK_FENIX_REFRESH_TOKEN_<NAME>`). Token z DRAKu tu nefunguje.
+- Každé volání potřebuje `premiseId` — ID **provozovny/obchodu**, ne kampaně: z `--premise-id`, nebo z `SKLIK_FENIX_PREMISE` v `.env`.
+- Přístupový token (platnost 1 h) se cachuje v `.fenix_cache_<account>.json`. `--user-id` funguje i tady (Fénix bere spravovaný účet už při vydání tokenu).
+
+| Příkaz | Klíčové přepínače |
+|--------|-------------------|
+| `feed-status` | `--premise-id`, `--json` — URL feedu, poslední úspěšný import, limit stahování za den |
+| `feed-diagnostics` | `--premise-id`, `--json` — zdraví nabídek: OK / chyba / neviditelné / „lze vylepšit" / bez kategorie |
+| `nakupy-campaigns` | `--premise-id`, `--json` — nákupní kampaně + modifikátory nabídek (web / zařízení / typ aukce) |
+| `nakupy-stats` | `--date-from`, `--date-to`, `--split "webType,deviceType,productType,conversionId"`, `--by-category`, `--granularity`, `--premise-id`, `--json` |
+| `shop-items` | `--premise-id`, `--all`, `--limit`, `--unpaired`/`--paired`, `--item-id "A,B"`, `--product-detail` (pozice v aukci + potřebná CPC), `--search-info`, `--json` |
+
+**Dvě konvence se tu liší od zbytku appky:**
+
+- **Částky jsou v korunách, ne v haléřích** (výjimka uvnitř Fénixu: `exhaustedDayBudget` u kampaně je v haléřích).
+- **Modifikátor nabídky je násobič v procentech: 100 % = beze změny, 120 % = +20 %.** DRAK má u `campaign-update --device-bids` opačnou konvenci (0 = beze změny) — nepřepisuj hodnotu z jednoho do druhého bez přepočtu. Modifikátory podle **webu a typu aukce jde přes API jen číst**, měnit se dají výhradně ve webovém Skliku; podle **zařízení** je zapisuje DRAK.
+
 ## Příklady
 
 ```bash
@@ -373,6 +394,11 @@ Jeden denní rozpočet sdílený více kampaněmi. Přiřazení kampaní se ří
 
 # Vyhledávací dotazy, které spustily reklamu
 ./run.sh search-queries --campaign-id 123 --limit 50
+
+# Nákupy (Seznam Nákupy) — zdraví feedu, kde se výkon ztrácí, co není spárované
+./run.sh feed-diagnostics
+./run.sh nakupy-stats --split webType,deviceType --date-from 2026-08-01 --date-to 2026-08-31
+./run.sh shop-items --unpaired --all --json
 
 # Měření a publika
 ./run.sh conversions
@@ -405,6 +431,7 @@ sklik-ppc-app/
 ├── sklik_cli.py        # Tenký entrypoint (volá sklik.cli.main)
 ├── sklik/              # Balík s implementací
 │   ├── api.py          #   engine: auth, session, rate-limit, _api_call, stránkování, chyby
+│   ├── fenix.py        #   engine pro REST API Fénix (Seznam Nákupy: feed, diagnostika, statistiky)
 │   ├── formatting.py   #   převod CZK⇄haléře + JSON výstup
 │   ├── reports.py      #   dvoukrokový report helper
 │   ├── images.py       #   načítání/kódování obrázků (bannery + combined)
@@ -427,6 +454,7 @@ sklik-ppc-app/
 - API **nepodporuje** filtry na nadřazené entity (`campaign.ids`, `group.ids`, `status`) v `restrictionFilter` — proto se aplikují na straně klienta, ale až nad kompletním seznamem.
 - **Výpisy jsou kompletní — appka je sama stránkuje.** Metody `*.list` vrací najednou nejvýš 5000 řádků (`statsDataLimit`) a **nehlásí, že něco useknuly** (v odpovědi není celkový počet). CLI proto prochází offsety až do konce: `campaigns`, `groups`, `keywords`, `negatives`, `ads`, `banners` i statistiky vrací celý účet. Do verze 1.8.1 tu byly natvrdo zadané stropy (kampaně 100, sestavy/inzeráty/bannery 500 řádků) a větší účet tiše přišel o zbytek.
 - Příklady použití API Drak: [github.com/seznam/sklik-api-examples](https://github.com/seznam/sklik-api-examples).
+- **API Fénix** (Seznam Nákupy) je samostatné REST rozhraní na `https://api.sklik.cz/v1` s vlastní autentizací (refresh token → hodinový access token) a vlastními konvencemi (koruny místo haléřů, násobiče místo přirážek). Dokumentace: [api.sklik.cz/fenix](https://api.sklik.cz/fenix/), specifikace: `api.sklik.cz/v1/openapi.json`.
 
 > Kompletní chování API (kvirky reportů, bezpečná výměna inzerátů, bannery, konverze, retargeting, rate limity, stavové kódy): **[docs/api-notes.md](docs/api-notes.md)**.
 

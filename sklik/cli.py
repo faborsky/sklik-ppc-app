@@ -59,6 +59,11 @@ from sklik.commands.display_targeting import (
 from sklik.commands.budgets import (
     cmd_budgets, cmd_budget_create, cmd_budget_update, cmd_budget_remove,
 )
+from sklik.commands.nakupy import (
+    cmd_feed_status, cmd_feed_diagnostics, cmd_nakupy_campaigns,
+    cmd_nakupy_stats, cmd_shop_items,
+)
+import sklik.fenix as fenix
 from sklik.reports import STAT_GRANULARITIES
 
 
@@ -121,7 +126,16 @@ _GROUPS: list[tuple[str, tuple[str, ...]]] = [
     ("Umístění (display)", ("placement",)),
     ("Cílení obsahovky", ("targeting",)),
     ("Rozpočty", ("budget",)),
+    ("Nákupy / feed (API Fénix)", ("feed-", "nakupy-", "shop-items")),
 ]
+
+# Commands served by the Fénix REST API. They authenticate with
+# SKLIK_FENIX_REFRESH_TOKEN (+ a premiseId), not the DRAK API token, so their
+# config is checked against a different variable.
+_FENIX_COMMANDS = frozenset({
+    "feed-status", "feed-diagnostics", "nakupy-campaigns",
+    "nakupy-stats", "shop-items",
+})
 
 
 def _build_epilog(subparsers) -> str:
@@ -874,11 +888,78 @@ def main() -> None:
     p.add_argument("--config-json", help="Partial config as JSON, merged over current")
     p.add_argument("--json", **json_kwargs)
 
+    # --- Nákupy / feed (Fénix REST API) ---
+    premise_kwargs: dict = {
+        "type": int, "dest": "premise_id", "default": None, "metavar": "ID",
+        "help": "Shop (provozovna) ID — default: SKLIK_FENIX_PREMISE in .env",
+    }
+
+    p = subparsers.add_parser("feed-status",
+                              help="Nákupy feed URL + last import (Fénix)")
+    p.add_argument("--premise-id", **premise_kwargs)
+    p.add_argument("--json", **json_kwargs)
+
+    p = subparsers.add_parser(
+        "feed-diagnostics",
+        help="Nákupy offer health: OK / error / not visible / improvable (Fénix)")
+    p.add_argument("--premise-id", **premise_kwargs)
+    p.add_argument("--json", **json_kwargs)
+
+    p = subparsers.add_parser(
+        "nakupy-campaigns",
+        help="Nákupy campaigns + bid multipliers (web/device/auction type) (Fénix)")
+    p.add_argument("--premise-id", **premise_kwargs)
+    p.add_argument("--json", **json_kwargs)
+
+    p = subparsers.add_parser(
+        "nakupy-stats",
+        help="Nákupy statistics split by placement/device/auction type or category (Fénix)")
+    p.add_argument("--premise-id", **premise_kwargs)
+    p.add_argument("--date-from", help="Start date YYYY-MM-DD (default: 30 days ago)")
+    p.add_argument("--date-to", help="End date YYYY-MM-DD (default: today)")
+    p.add_argument("--split", metavar="DIMS",
+                   help="Comma-separated split: deviceType,webType,productType,"
+                        "conversionId (conversionId only from 2026-01-01)")
+    p.add_argument("--by-category", dest="by_category", action="store_true",
+                   help="Group by product category instead of --split dimensions")
+    p.add_argument("--granularity", default="none",
+                   choices=["none", "daily", "weekly", "monthly", "quarterly", "yearly"],
+                   help="Split stats by period (default: none = whole window)")
+    p.add_argument("--json", **json_kwargs)
+
+    p = subparsers.add_parser(
+        "shop-items",
+        help="Nákupy feed items: pairing, per-item CPC, auction position (Fénix)")
+    p.add_argument("--premise-id", **premise_kwargs)
+    p.add_argument("--limit", type=int, default=None,
+                   help="Items per request (default and max: 3000, "
+                        "300 with --search-info, 50 with --product-detail)")
+    p.add_argument("--all", action="store_true",
+                   help="Page through the whole feed (default: first page only)")
+    pairing = p.add_mutually_exclusive_group()
+    pairing.add_argument("--unpaired", action="store_true",
+                         help="Only items NOT paired to a product")
+    pairing.add_argument("--paired", action="store_true",
+                         help="Only items paired to a product")
+    p.add_argument("--item-id", dest="item_id", metavar="IDS",
+                   help="Comma-separated ITEM_IDs (max 100, or 50 with --product-detail)")
+    p.add_argument("--product-detail", dest="product_detail", action="store_true",
+                   help="Also load auction position + CPC needed to win (slower)")
+    p.add_argument("--search-info", dest="search_info", action="store_true",
+                   help="Also load max-CPC info for Zboží inzeráty (slower)")
+    p.add_argument("--json", **json_kwargs)
+
     parser.epilog = _build_epilog(subparsers)
     args = parser.parse_args()
     api.set_json_output(getattr(args, "json", False))
     api.set_account(getattr(args, "account", api.DEFAULT_ACCOUNT))
-    api.check_config()
+    # Fénix is a separate API with its own token; DRAK's config check would
+    # reject a Fénix-only setup (and vice versa).
+    if args.command in _FENIX_COMMANDS:
+        fenix.set_user_id(getattr(args, "user_id", None))
+        fenix.check_config()
+    else:
+        api.check_config()
 
     commands = {
         "account": cmd_account,
@@ -969,6 +1050,11 @@ def main() -> None:
         "regions": cmd_regions,
         "autotagging": cmd_autotagging,
         "autotagging-update": cmd_autotagging_update,
+        "feed-status": cmd_feed_status,
+        "feed-diagnostics": cmd_feed_diagnostics,
+        "nakupy-campaigns": cmd_nakupy_campaigns,
+        "nakupy-stats": cmd_nakupy_stats,
+        "shop-items": cmd_shop_items,
     }
 
     commands[args.command](args)

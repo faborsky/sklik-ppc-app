@@ -14,26 +14,30 @@ source venv/bin/activate && python sklik_cli.py <command> [flags]
 The implementation is a package under `sklik/`; `sklik_cli.py` is a thin entrypoint.
 
 - `sklik/api.py` — **engine**: config, account/token discovery, auth + session cache, the cross-session **request budget** (rate limiting), `_api_call`, paging of list methods (`_fetch_all`, `_list_page_size`), and structured errors (`_fail` / `_fail_msg`).
+- `sklik/fenix.py` — **engine for the Fénix REST API** (`api.sklik.cz/v1`, Seznam Nákupy): separate auth (`SKLIK_FENIX_REFRESH_TOKEN` → 1h access token cached per account+managed user in `.fenix_cache_<account>.json`), `fenix.call()`, cursor paging (`fenix.fetch_all()`), `poll_report()` for async stats. Reuses `api._fail_msg`. Needs a `premiseId` (shop) via `fenix.resolve_premise()`.
 - `sklik/formatting.py` — CZK⇄haléře conversion + `_output_json`.
 - `sklik/reports.py` — two-step report helper (`createReport` → `readReport`).
 - `sklik/images.py` — image loading/base64 shared by combined ads and banners.
-- `sklik/commands/*.py` — one module per domain (`account`, `campaigns`, `groups`, `keywords`, `ads`, `research`, `sitelinks`, `conversions`, `retargeting`, `banners`, `placements`).
+- `sklik/commands/*.py` — one module per domain (`account`, `campaigns`, `groups`, `keywords`, `ads`, `research`, `sitelinks`, `conversions`, `retargeting`, `banners`, `placements`, `nakupy`).
 - `sklik/cli.py` — argparse wiring + dispatch.
 
-Shared mutable state (`ACTIVE_ACCOUNT`, `_JSON_OUTPUT`, session) lives in `api.py` and changes only through `api.set_account()` / `api.set_json_output()`. Command modules read it via the `api` module — never `from sklik.api import ACTIVE_ACCOUNT`, which would copy a stale value. `BASE_DIR` in `api.py` resolves to the project root, so `.env` and the `.session_cache_*` / `.rate_limit_*` files stay where they were.
+Shared mutable state (`ACTIVE_ACCOUNT`, `_JSON_OUTPUT`, session) lives in `api.py` and changes only through `api.set_account()` / `api.set_json_output()`. Fénix keeps its own `ACTIVE_USER_ID` in `fenix.py` (`fenix.set_user_id()`), because there the managed account is chosen when the token is minted, not per call. Command modules read it via the `api` module — never `from sklik.api import ACTIVE_ACCOUNT`, which would copy a stale value. `BASE_DIR` in `api.py` resolves to the project root, so `.env` and the `.session_cache_*` / `.rate_limit_*` files stay where they were.
 
 ## Authentication & accounts
 
 - Tokens in `.env`, one env var per login: `SKLIK_API_TOKEN` = the `default` account (used when `--account` is omitted); `SKLIK_API_TOKEN_<NAME>` = a named account (`--account <name>`, uppercased). Accounts are discovered at runtime — no names hardcoded.
 - Session cached per account in `.session_cache_<account>.json` (25 min TTL); auto-reconnects on 401.
 - **`--account <name>`** and **`--user-id <id>`** are independent global flags (before the subcommand). `--account` picks the login/token; `--user-id` acts on a MANAGED account under the active login (agency → client).
+- **Fénix commands** (`feed-*`, `nakupy-*`, `shop-items`) use a **separate API and token**: `SKLIK_FENIX_REFRESH_TOKEN` / `_<NAME>` (a refresh token from the Sklik web UI, exchanged for a 1h access token). They also need a `premiseId` (shop, not campaign): `--premise-id` or `SKLIK_FENIX_PREMISE` / `_<NAME>`. `cli.py` calls `fenix.check_config()` for these, never `api.check_config()`.
 - A token-less/unknown `--account` fails with an error listing the configured accounts. `suggest`/`suggest-stats` silently ignore `--user-id` (the API methods take no managed-user param) — call them without it.
 
 ## Price convention
 
 CLI accepts/displays **CZK**; the API uses haléře (100 = 1 Kč). Conversion is automatic both ways.
 
-## Commands (88, grouped)
+**Fénix (Nákupy) is the exception**: it sends plain CZK floats, so the `sklik/formatting.py` helpers must NOT touch those values. One field bucks even that — the campaign's `exhaustedDayBudget` is in haléře while its `budget.dayBudget` is in CZK.
+
+## Commands (93, grouped)
 
 **Full flag reference + examples: [README.md](README.md).** Index:
 
@@ -51,6 +55,7 @@ CLI accepts/displays **CZK**; the API uses haléře (100 = 1 Kč). Conversion is
 - **Placements:** `placements`, `placement-create/remove`, `placements-excluded`, `placement-exclude` (+`-remove`/`-restore`) — negative placements
 - **Display targeting:** `targeting-categories`, `targeting`, `targeting-add`, `targeting-exclude`, `targeting-remove`, `targeting-restore` — unified `--type interest/theme/intend`
 - **Shared budgets:** `budgets`, `budget-create/update/remove` — campaign assignment lives on the budget; amounts in plain CZK
+- **Nákupy / feed (Fénix API, separate token):** `feed-status`, `feed-diagnostics` (offer health), `nakupy-campaigns` (web/device/auction-type **bid multipliers**, unreadable via DRAK), `nakupy-stats` (`--split webType,deviceType,productType,conversionId` or `--by-category`; async report), `shop-items` (`--all`, `--unpaired`, `--product-detail` = auction position + CPC-to-win)
 
 ## Safety
 
@@ -69,6 +74,7 @@ CLI accepts/displays **CZK**; the API uses haléře (100 = 1 Kč). Conversion is
 - **Audiences attach to groups via `retargeting-attach`/`retargeting-detach`/`retargeting-attached`** (v1.6.0; `retargeting.group.lists.*`). Attaching a **deleted** list fails with a bare `406 Bad values` — check `deleted` in `retargeting --json` first.
 - **Soft-delete quirks**: re-adding a removed display-targeting category → `409 entity_already_exists` (use `targeting-restore`); re-excluding a removed negative placement → `group_pattern_duplicity` (use `placement-exclude-restore`). `placements-excluded` cannot show the pattern text (API never returns it).
 - **Batch writes are all-or-nothing**; split payloads over the per-method cap (typically ≤100 for create/update/remove). Check caps with `api-limits`.
+- **Fénix `maxCpcMultiplier` is a multiplier, DRAK `devicesPriceRatio` is a modifier.** Fénix: 100 = no change, 120 = +20 %. DRAK: 0 = no change, 20 = +20 %. Copying a number from `nakupy-campaigns` into `campaign-update --device-bids` without subtracting 100 sets a wildly wrong bid. Only device multipliers are writable at all — web and auction-type ones are web-UI only, in both APIs.
 - **The API is strict about payload shapes and scalar types** — a struct where it wants a struct, an `int` where it wants an `int`. A bare int in an array of structs (`regions`) or a float in an int field (`devicesPriceRatio`) is a hard `400`, not a coercion. When adding or changing a write payload, verify the shape against [docs/api-notes.md](docs/api-notes.md) / the DRAK docs — and for campaigns use **`campaigns.check`** (and `ads.check` for ads): same payload, no writes, one request. This class of bug shipped undetected in `--regions` / `--device-bids` / `--schedule-json` until v1.8.1.
 
 Full API behaviour, quirks, rate-limit internals and status codes: **[docs/api-notes.md](docs/api-notes.md)**.
