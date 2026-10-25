@@ -89,3 +89,7 @@ Bump `__version__` in `sklik/__init__.py` → update README (version line + comm
 - **[docs/api-notes.md](docs/api-notes.md)** — how the DRAK API actually behaves (endpoints, report quirks, ad/banner/conversion/retargeting specifics, rate limits, status codes).
 - **[CHANGELOG.md](CHANGELOG.md)** — version history.
 - **`skill/sklik-ppc/`** — the bundled Claude Code skill (`/sklik-ppc`): strategy, campaign structure, display rules.
+
+## README language
+
+README.md is Czech only on purpose: Sklik is a Czech-only platform. Author links: faborsky.cz + aifirst.cz.

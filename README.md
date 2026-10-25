@@ -1,15 +1,17 @@
 # Sklik PPC App
 
-CLI aplikace pro správu PPC kampaní na **Seznam Sklik** přes [API Drak](https://api.sklik.cz/drak/) (JSON, verze v5).
+CLI aplikace pro správu PPC kampaní na **Seznam Sklik** přes [API Drak](https://api.sklik.cz/drak/) (JSON, verze v5). Je pro marketéry a agentury, kteří chtějí kampaně spravovat z terminálu nebo konverzací s Claude Code místo ručního klikání ve webovém Skliku.
 
 Pokrývá kompletní životní cyklus *search* i *obsahových* kampaní: kampaně, sestavy, klíčová slova, inzeráty, vylučující slova, výzkum klíčových slov, statistiky. K tomu měření konverzí, retargetingová publika, cílení (regiony / zařízení / rozvrh), obrázkové bannery a kombinovanou (nativní) reklamu.
+
+Autor: [Jindřich Fáborský](https://www.faborsky.cz) · kurz [AI First](https://aifirst.cz)
 
 > [!TIP]
 > **Appka je zdarma a je tvoje.** Naklonuj si ji, používej ji, přestav si ji po svém.
 >
 > Nevíš, jak ji rozjet? Nebo chceš AI v marketingu používat systematicky: řídit z jednoho místa všechny kanály, automatizovat rutinu, postavit si vlastní znalostní bázi a vibe codovat si nástroje na míru své firmě? To učím v kurzu **[AI First](https://aifirst.cz)**. Tahle appka je v něm vysvětlená i s tím, jak si postavit vlastní.
 
-Konkrétně je doprovodným materiálem k 7. lekci kurzu. Součástí repa je i [skill pro Claude Code](#skill-pro-claude-code-sklik-ppc), který appku obaluje.
+Součástí repa je i [skill pro Claude Code](#skill-pro-claude-code-sklik-ppc), který appku obaluje.
 
 ## 🆕 Co je nového
 
@@ -132,7 +134,7 @@ Příkazy se spouští přes `run.sh` (sám aktivuje venv):
 
 ### Pulse
 
-Souhrn celého účtu **jedním voláním**, místo řetězení `account` + `campaigns` + `campaign-stats`. Vrátí totály, statistiky po kampaních, delty vůči předchozímu stejně dlouhému období a top movery, předpočítané do kompaktního digestu (ideální pro levný/rychlý analytický pull).
+Souhrn celého účtu **jedním voláním**, místo řetězení `account` + `campaigns` + `campaign-stats`. Vrátí totály, statistiky po kampaních, delty vůči předchozímu stejně dlouhému období a top movery, předpočítané do kompaktního digestu. Hodí se na levný a rychlý analytický pull.
 
 | Příkaz | Klíčové přepínače |
 |--------|-------------------|
@@ -470,19 +472,12 @@ sklik-ppc-app/
 
 > Kompletní chování API (kvirky reportů, bezpečná výměna inzerátů, bannery, konverze, retargeting, rate limity, stavové kódy): **[docs/api-notes.md](docs/api-notes.md)**.
 
-## O kurzu AI First
-
-**[AI First](https://aifirst.cz)** je praktický videokurz AI a vibe codingu pro marketéry, podnikatele a kohokoli s chutí tvořit.
-
-Sedmá lekce ukazuje, jak vibe coding zapojit do **každodenní marketingové práce**: postavit si vlastní nástroje na míru, automatizovat rutinu a ušetřit hodiny času. Bez programátora.
-
-> *„Nechte AI dělat práci, kterou musíte, ať můžete dělat práci, kterou chcete.“*
-
-- 🎬 18,5 hodiny praktických videí, 10 lekcí
-- 🚀 Reálná praxe: stavíš věci, které opravdu používáš (jako tenhle nástroj)
-- ⏱️ Důraz na úsporu času a efektivitu v běžné práci
-- 👉 **[aifirst.cz](https://aifirst.cz)**
-
 ## Licence
 
 MIT, viz [LICENSE](LICENSE).
+
+## Autor
+
+[Jindřich Fáborský](https://www.faborsky.cz), marketér a lektor. Vibe coding a AI v marketingu učím v kurzu [AI First](https://aifirst.cz).
+
+Sklik PPC App používám na vlastní kampaně a v kurzu je doprovodným materiálem k 7. lekci, která ukazuje, jak vibe coding zapojit do každodenní marketingové práce. Další appky pro foundery a marketéry najdeš na **[faborsky.cz/appky](https://www.faborsky.cz/appky)**.
