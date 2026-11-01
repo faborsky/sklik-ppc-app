@@ -304,6 +304,18 @@ Výpis přes `ads` (`adType: combined`), statistiky přes `ad-stats`, smazání 
 
 > **`sitelink-assign` NAHRAZUJE celou sadu** přiřazených sitelinků kampaně/sestavy, vždy pošli kompletní seznam, ne jen přírůstek. **Přejmenování sitelinku (`sitelink-update --name`) vytvoří NOVÉ ID** (server dělá remove+create), CLI nové ID vypíše; změna `--url` ID zachová.
 
+### Popisky
+
+| Příkaz | Klíčové přepínače |
+|--------|-------------------|
+| `callouts` | `--json` |
+| `callout-create` | `--name`, `--json` |
+| `callout-remove` | `--callout-id`, `--confirm`, `--json` |
+| `callout-assign` | `--campaign-id` **nebo** `--group-id`, `--callout-ids "1,2,3"` (`""` = odpojit všechny popisky), `--dry-run`, `--json` |
+| `callouts-assigned` | `--campaign-id` **nebo** `--group-id`, `--json`. Co je aktuálně přiřazené |
+
+> **Popisek je v API sitelink bez URL**, vlastní metody nemá. CLI je přesto drží odděleně: `callout-*` pracují jen se záznamy bez URL a na sitelinky nesáhnou. **`callout-assign` nahradí popisky kampaně/sestavy a přiřazené sitelinky ponechá** (`--dry-run` ukáže výslednou sadu bez zápisu). Pozor na opačný směr: **`sitelink-assign` přepisuje celou sadu včetně popisků**, takže po něm popisky přiřaď znovu. `sitelink-update` popisek odmítne (URL by z něj udělala sitelink), text popisku se mění přes `callout-remove` a `callout-create`. Výpis `sitelinks` ukazuje obojí, popisky mají prázdné URL.
+
 ### Konverze (definice měření)
 
 Konverze = pojmenovaná definice cílové akce (nákup, registrace…) a její hodnoty. CLI spravuje *definice*; samotné měření (pixel / SEM) žije na webu.

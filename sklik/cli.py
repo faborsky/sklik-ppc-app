@@ -33,6 +33,8 @@ from sklik.commands.research import cmd_suggest, cmd_suggest_stats, cmd_search_q
 from sklik.commands.sitelinks import (
     cmd_sitelinks, cmd_sitelink_create, cmd_sitelink_remove,
     cmd_sitelink_update, cmd_sitelink_assign, cmd_sitelinks_assigned,
+    cmd_callouts, cmd_callout_create, cmd_callout_remove,
+    cmd_callout_assign, cmd_callouts_assigned,
 )
 from sklik.commands.conversions import (
     cmd_conversions, cmd_conversion_types, cmd_conversion_create,
@@ -127,6 +129,7 @@ _GROUPS: list[tuple[str, tuple[str, ...]]] = [
     ("Inzeráty (search)", ("ad", "combined-create")),
     ("Výzkum", ("suggest", "search-queries")),
     ("Sitelinky", ("sitelink",)),
+    ("Popisky", ("callout",)),
     ("Konverze", ("conversion",)),
     ("Retargeting", ("retargeting",)),
     ("Bannery (display)", ("banner",)),
@@ -561,7 +564,7 @@ def main() -> None:
     p.add_argument("--json", **json_kwargs)
 
     # --- sitelink-create ---
-    p = subparsers.add_parser("sitelink-create", help="Create sitelink")
+    p = subparsers.add_parser("sitelink-create", help="Create sitelink (for a callout use callout-create)")
     p.add_argument("--name", required=True, help="Sitelink text")
     p.add_argument("--url", required=True, help="Sitelink URL")
     p.add_argument("--json", **json_kwargs)
@@ -584,7 +587,8 @@ def main() -> None:
     # --- sitelink-assign ---
     p = subparsers.add_parser(
         "sitelink-assign",
-        help="Assign sitelinks to a campaign or group — REPLACES the whole set")
+        help="Assign sitelinks to a campaign or group — REPLACES the whole set, "
+             "callouts included (callout-assign keeps sitelinks)")
     p.add_argument("--campaign-id", type=int, help="Campaign ID")
     p.add_argument("--group-id", type=int, help="Group ID")
     p.add_argument("--sitelink-ids", required=True,
@@ -594,6 +598,40 @@ def main() -> None:
     # --- sitelinks-assigned ---
     p = subparsers.add_parser(
         "sitelinks-assigned", help="Show sitelinks assigned to a campaign or group")
+    p.add_argument("--campaign-id", type=int, help="Campaign ID")
+    p.add_argument("--group-id", type=int, help="Group ID")
+    p.add_argument("--json", **json_kwargs)
+
+    # --- callouts ---
+    p = subparsers.add_parser("callouts", help="List callouts (popisky)")
+    p.add_argument("--json", **json_kwargs)
+
+    # --- callout-create ---
+    p = subparsers.add_parser("callout-create", help="Create callout")
+    p.add_argument("--name", required=True, help="Callout text")
+    p.add_argument("--json", **json_kwargs)
+
+    # --- callout-remove ---
+    p = subparsers.add_parser("callout-remove", help="Remove callout")
+    p.add_argument("--callout-id", type=int, required=True, help="Callout ID")
+    p.add_argument("--confirm", action="store_true", help="Required for deletion")
+    p.add_argument("--json", **json_kwargs)
+
+    # --- callout-assign ---
+    p = subparsers.add_parser(
+        "callout-assign",
+        help="Assign callouts to a campaign or group — replaces its callouts, keeps its sitelinks")
+    p.add_argument("--campaign-id", type=int, help="Campaign ID")
+    p.add_argument("--group-id", type=int, help="Group ID")
+    p.add_argument("--callout-ids", required=True,
+                   help='Comma-separated callout IDs; "" removes all callouts')
+    p.add_argument("--dry-run", action="store_true",
+                   help="Show the resulting set without writing")
+    p.add_argument("--json", **json_kwargs)
+
+    # --- callouts-assigned ---
+    p = subparsers.add_parser(
+        "callouts-assigned", help="Show callouts assigned to a campaign or group")
     p.add_argument("--campaign-id", type=int, help="Campaign ID")
     p.add_argument("--group-id", type=int, help="Group ID")
     p.add_argument("--json", **json_kwargs)
@@ -1217,6 +1255,11 @@ def main() -> None:
         "sitelink-update": cmd_sitelink_update,
         "sitelink-assign": cmd_sitelink_assign,
         "sitelinks-assigned": cmd_sitelinks_assigned,
+        "callouts": cmd_callouts,
+        "callout-create": cmd_callout_create,
+        "callout-remove": cmd_callout_remove,
+        "callout-assign": cmd_callout_assign,
+        "callouts-assigned": cmd_callouts_assigned,
         "retargeting-attach": cmd_retargeting_attach,
         "retargeting-detach": cmd_retargeting_detach,
         "retargeting-attached": cmd_retargeting_attached,
