@@ -54,14 +54,21 @@ def cmd_suggest(args: argparse.Namespace) -> None:
         print(f"\nTotal: {data.get('total', len(suggestions))} suggestions")
 
 
+SUGGEST_STATS_MAX = 100  # keywords.suggest.stats cap per call (DRAK 11.19.0)
+
+
 def cmd_suggest_stats(args: argparse.Namespace) -> None:
     """Get search volume stats for keywords."""
-    queries = [q.strip() for q in args.queries.split(",")]
+    queries = [q.strip() for q in args.queries.split(",") if q.strip()]
     opts: dict = {"granularity": args.granularity}
 
-    # suggest.stats doesn't support managed accounts (userId)
-    data = _api_call("keywords.suggest.stats", [queries, opts])
-    stats = data.get("stats", [])
+    # suggest.stats doesn't support managed accounts (userId), and since DRAK
+    # 11.19.0 takes at most SUGGEST_STATS_MAX queries per call — send in chunks.
+    stats: list[dict] = []
+    for i in range(0, len(queries), SUGGEST_STATS_MAX):
+        data = _api_call("keywords.suggest.stats",
+                         [queries[i:i + SUGGEST_STATS_MAX], opts])
+        stats.extend(data.get("stats", []) or [])
 
     if args.json:
         out = []

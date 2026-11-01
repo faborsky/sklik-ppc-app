@@ -129,13 +129,22 @@ def cmd_sitelink_update(args: argparse.Namespace) -> None:
 # set REPLACES the entire assignment of the campaign/group; empty list clears it.
 
 def cmd_sitelink_assign(args: argparse.Namespace) -> None:
-    """Assign sitelinks to a campaign or group. REPLACES the whole set."""
+    """Assign sitelinks to a campaign or group. Replaces its sitelinks, keeps its callouts.
+
+    The API keeps sitelinks and callouts in ONE set and `set` replaces all of
+    it, so the callouts already assigned are sent again (mirror of
+    callout-assign). Before v1.12.0 this wiped the callouts too.
+    """
     if bool(args.campaign_id) == bool(args.group_id):
         print("ERROR: Use exactly one of --campaign-id or --group-id.", file=sys.stderr)
         sys.exit(1)
 
-    ids = [int(x) for x in args.sitelink_ids.split(",") if x.strip()]
+    sitelink_ids = [int(x) for x in args.sitelink_ids.split(",") if x.strip()]
     uid = getattr(args, "user_id", None)
+
+    kept_callouts = [s.get("id") for s in _assigned_records(args, uid)
+                     if _is_callout(s) and s.get("id") not in sitelink_ids]
+    ids = sitelink_ids + kept_callouts
 
     if args.campaign_id:
         _api_call("sitelinks.campaign.set",
@@ -147,13 +156,15 @@ def cmd_sitelink_assign(args: argparse.Namespace) -> None:
         target = f"group {args.group_id}"
 
     if args.json:
-        _output_json({"assigned": ids, "campaignId": args.campaign_id,
-                      "groupId": args.group_id})
+        _output_json({"assigned": sitelink_ids, "keptCallouts": kept_callouts,
+                      "campaignId": args.campaign_id, "groupId": args.group_id})
     else:
-        if ids:
-            print(f"Sitelinks {ids} assigned to {target} (previous assignment replaced).")
+        kept = f"; callouts kept: {kept_callouts}" if kept_callouts else ""
+        if sitelink_ids:
+            print(f"Sitelinks {sitelink_ids} assigned to {target} "
+                  f"(previous sitelinks replaced{kept}).")
         else:
-            print(f"All sitelinks cleared from {target}.")
+            print(f"All sitelinks cleared from {target}{kept}.")
 
 
 def cmd_sitelinks_assigned(args: argparse.Namespace) -> None:

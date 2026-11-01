@@ -530,8 +530,17 @@ def main() -> None:
     p.add_argument("--json", **json_kwargs)
 
     # --- negative-remove ---
-    p = subparsers.add_parser("negative-remove", help="Remove negative keyword")
-    p.add_argument("--keyword-id", type=int, required=True, help="Negative keyword ID")
+    p = subparsers.add_parser(
+        "negative-remove",
+        help="Permanently delete a group negative (by --group-id + --name + --match-type, or --keyword-id)")
+    p.add_argument("--group-id", type=int, help="Group ID")
+    p.add_argument("--name", help="Negative keyword text")
+    p.add_argument("--match-type", default="negativeBroad",
+                   choices=["negativeBroad", "negativePhrase", "negativeExact",
+                            "broad", "phrase", "exact"],
+                   help="Match type (default: negativeBroad; the short forms from `negatives` work too)")
+    p.add_argument("--keyword-id", type=int,
+                   help="Negative keyword ID from `negatives` — looked up, then deleted by name + match type")
     p.add_argument("--confirm", action="store_true", help="Required for deletion")
     p.add_argument("--json", **json_kwargs)
 
@@ -587,8 +596,8 @@ def main() -> None:
     # --- sitelink-assign ---
     p = subparsers.add_parser(
         "sitelink-assign",
-        help="Assign sitelinks to a campaign or group — REPLACES the whole set, "
-             "callouts included (callout-assign keeps sitelinks)")
+        help="Assign sitelinks to a campaign or group — replaces its sitelinks, "
+             "keeps its callouts (mirror of callout-assign)")
     p.add_argument("--campaign-id", type=int, help="Campaign ID")
     p.add_argument("--group-id", type=int, help="Group ID")
     p.add_argument("--sitelink-ids", required=True,

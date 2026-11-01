@@ -382,6 +382,24 @@ def _fail_msg(message: str, **extra: object) -> None:
     sys.exit(1)
 
 
+def _parse_response(method: str, resp: requests.Response) -> dict:
+    """JSON body of a DRAK answer. Since DRAK 11.24.3 (2026-07-21) an exceeded
+    request limit also comes back as HTTP 429, sometimes WITHOUT a JSON body —
+    map it to the same `status: 429` the retry below already handles instead of
+    failing on "non-JSON response"."""
+    try:
+        data = resp.json()
+    except ValueError:
+        data = None
+    if resp.status_code == 429 and not (isinstance(data, dict) and data.get("status")):
+        return {"status": 429}
+    if not isinstance(data, dict):
+        _fail_msg(f"{method} returned non-JSON response (HTTP {resp.status_code}) — "
+                  f"likely an unknown method name or an API outage.",
+                  method=method, httpStatus=resp.status_code)
+    return data
+
+
 def _api_call(method: str, params: list | None = None, user_id: int | None = None,
               _throttle: bool = True, _retries: int = 0, _soft: bool = False) -> dict:
     """Make a Sklik DRAK API call with session management.
@@ -418,12 +436,7 @@ def _api_call(method: str, params: list | None = None, user_id: int | None = Non
         json=all_params,
         timeout=60,
     )
-    try:
-        data = resp.json()
-    except ValueError:
-        _fail_msg(f"{method} returned non-JSON response (HTTP {resp.status_code}) — "
-                  f"likely an unknown method name or an API outage.",
-                  method=method, httpStatus=resp.status_code)
+    data = _parse_response(method, resp)
 
     # Handle expired session — re-auth once
     if data.get("status") == 401:
@@ -436,7 +449,7 @@ def _api_call(method: str, params: list | None = None, user_id: int | None = Non
             json=all_params,
             timeout=60,
         )
-        data = resp.json()
+        data = _parse_response(method, resp)
 
     # Update cached session from response
     if "session" in data and data["session"]:

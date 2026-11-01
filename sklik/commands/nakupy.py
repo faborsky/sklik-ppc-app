@@ -25,7 +25,9 @@ endpoint keeps DRAK conventions while the rest of Fénix does not:
 from __future__ import annotations
 
 import argparse
+import re
 import sys
+import urllib.parse
 from datetime import datetime, timedelta
 
 import sklik.fenix as fenix
@@ -86,11 +88,40 @@ def _modifier(value: int | float | None) -> str:
 # Feed
 # ---------------------------------------------------------------------------
 
+# Query parameters whose value is an access secret. Many shops protect the feed
+# with e.g. `?hash=…`; the URL must not reach terminals, logs, --json output or
+# an agent's transcript with it. Matched as a whole name or a `_`/`-` suffix
+# (`hash`, `feed_token`, `api-key`, `X-Amz-Signature`), case-insensitive.
+_SECRET_PARAM = re.compile(
+    r"(?:^|[_-])(hash|token|key|apikey|secret|auth|pass|passwd|password|pwd|"
+    r"sig|signature|credential|access[_-]?token)$", re.I)
+
+
+def _mask_feed_url(url: object) -> object:
+    """Feed URL with secret query values and URL credentials replaced by `***`.
+    Scheme, host, path and the parameter names stay, so diagnosis still works."""
+    if not isinstance(url, str) or not url:
+        return url
+    try:
+        parts = urllib.parse.urlsplit(url)
+    except ValueError:
+        return "(unparseable feed URL hidden)"
+    netloc = parts.netloc
+    if "@" in netloc:   # https://user:pass@host/…
+        netloc = "***@" + netloc.rsplit("@", 1)[1]
+    query = "&".join(
+        (f"{k}=***" if _SECRET_PARAM.search(urllib.parse.unquote_plus(k)) and v else
+         (f"{k}={v}" if sep else k))
+        for k, sep, v in (pair.partition("=") for pair in parts.query.split("&") if pair))
+    return urllib.parse.urlunsplit((parts.scheme, netloc, parts.path, query, parts.fragment))
+
+
 def cmd_feed_status(args: argparse.Namespace) -> None:
     """Feed URL, last successful import and how often it may be downloaded."""
     premise = fenix.resolve_premise(args.premise_id)
     data = fenix.call("GET", "/nakupy/feeds/", {"premiseId": premise})
-    feeds = data.get("items") or []
+    feeds = [dict(f, feedUrl=_mask_feed_url(f["feedUrl"])) if isinstance(f, dict)
+             and "feedUrl" in f else f for f in data.get("items") or []]
 
     if args.json:
         _output_json(feeds)

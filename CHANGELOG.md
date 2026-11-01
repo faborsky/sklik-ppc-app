@@ -2,7 +2,64 @@
 
 Verze aplikace je v `sklik/__init__.py` (`__version__`, SemVer). Formát vychází z [Keep a Changelog](https://keepachangelog.com/). Datum je vydání dané verze.
 
-## [1.12.0] — 2026-10-22 — úpravy kampaní a reklam přes API Fénix 1.34.0: datum začátku a konce, frekvenční strop kampaně, data bannerů
+## [1.12.0] — 2026-11-01 — příkazy `fenix-*`, popisky `callout-*`, opravy `negative-remove`, `suggest-stats`, HTTP 429 a skrytí tajných parametrů URL feedu
+
+Vydání spojuje dva příspěvky od Ivety Dudové (PR #2 a #9: příkazy `fenix-*`,
+úpravy kampaní a reklam přes Fénix, PR #5: popisky) s opravami nahlášenými
+v issues #3, #4, #6 a #7. Verze 1.11.0 samostatně nevyšla, její obsah je níže
+a je součástí tohoto vydání.
+
+### Opraveno
+
+- **`negative-remove` po změně DRAKu 11.27.0 (14. 9. 2026) nefungoval** (#3).
+  `keywords.negative.remove` od té verze nebere ID, ale `groupId` a seznam
+  `{name, matchType}`, a maže trvale (`keywords.negative.restore` zmizelo).
+  Nově `negative-remove --group-id X --name "…" --match-type … --confirm`.
+  `--keyword-id` zůstává: CLI záznam nejdřív dohledá a smaže podle textu
+  a typu shody. `--match-type` bere i krátké tvary `broad`/`phrase`/`exact`,
+  ve kterých typ vrací `negatives`. Kampaňová negativa maže
+  `fenix-negative-remove`.
+- **`negative-add` a `negative-add-batch` hlásily „ID ?“ a 0 přidaných**,
+  protože `keywords.negative.create` už nevrací `negativeKeywordIds`. Teď
+  hlásí počet odeslaných slov (dávka je všechno, nebo nic), v `--json` jako
+  `added`.
+- **`suggest-stats` nad 100 dotazů padal** na `406 Number of provided queries
+  exceeds limit of 100` (limit od DRAKu 11.19.0) (#7). Dotazy se posílají po
+  stovkách a výsledky se spojí.
+- **HTTP 429 bez JSON těla končil chybou „non-JSON response“** (#7). Od DRAKu
+  11.24.3 přichází překročení limitu i jako HTTP 429, někdy bez těla. Teď
+  projde stejným čekáním a opakováním jako 429 v těle odpovědi.
+- **`feed-status` vypisoval URL feedu i s přístupovým klíčem** (#6), např.
+  `?hash=…`, a to v terminálu, v `--json` i v přepisu konverzace s Claude Code.
+  Hodnoty parametrů jako `hash`, `token`, `key`, `secret`, `auth`, `password`,
+  `signature` (i s předponou, např. `feed_token`) a přihlašovací údaje v URL
+  jsou nahrazené `***`. Doména, cesta a názvy parametrů zůstávají.
+
+### Přidáno
+
+- **Popisky jako samostatné příkazy** (#4, PR #5): `callouts`,
+  `callout-create`, `callout-remove`, `callout-assign` (nahradí popisky,
+  ponechá sitelinky; `--dry-run`) a `callouts-assigned`. Popisek je v DRAKu
+  sitelink bez URL (changelog DRAKu 10.2.0), CLI je přesto drží odděleně.
+  `sitelink-update` popisek odmítne, protože URL by z něj udělala sitelink.
+
+### Změněno
+
+- **`sitelink-assign` ponechá přiřazené popisky.** API má pro sitelinky
+  a popisky jednu sadu a `set` ji přepisuje celou. Dřív tak přiřazení
+  sitelinků potichu smazalo popisky, teď je příkaz pošle znovu (zrcadlo
+  `callout-assign`). `--sitelink-ids ""` odpojí jen sitelinky. V `--json`
+  přibylo `keptCallouts`.
+
+### Testy
+
+- Nová offline sada `tests/` (stdlib `unittest`, bez sítě a bez nových
+  závislostí): tvary požadavků `negative-remove`, dělení `suggest-stats`,
+  429 bez těla, maskování URL feedu, sitelinky × popisky, `Retry-After`
+  a 204 u Fénixu, data kampaní. Spuštění:
+  `python -m unittest discover -s tests`.
+
+### Úpravy kampaní a reklam přes API Fénix 1.34.0 (PR #9)
 
 Při zakládání obsahových kampaní chyběly tři věci: konec kampaně, frekvenční
 strop kampaně a konec bannerů. Šly nastavit jen ve webovém Skliku nebo vlastním
@@ -17,7 +74,7 @@ skriptem. Příčina:
   s objektem `capping`, `PATCH …/ads/{adId}/` s `startDate` / `endDate` u všech
   typů reklam). CLI úpravy přes Fénix nebalilo vůbec.
 
-### Přidáno
+#### Přidáno
 
 - **`fenix-campaign-update`**: stav, název, denní a celkový rozpočet (Kč),
   začátek a konec (`YYYY-MM-DD`, `none` smaže), frekvenční strop kampaně
@@ -37,7 +94,7 @@ skriptem. Příčina:
 - `fenix-campaigns` vypisuje začátek, konec a frekvenční strop, `fenix-ads`
   začátek a konec.
 
-### Ověření
+#### Ověření
 
 - Stejné požadavky, jaké příkazy posílají, prošly 22. 10. 2026 na živém účtu
   vlastním skriptem: `PATCH` kampaně typu `context` s `endDate` a
@@ -48,7 +105,7 @@ skriptem. Příčina:
   `--total-budget`, `--dry-run` u úprav, `fenix-ad-update` u jiných typů než
   banner, DRAKové `--start-date` / `--end-date`.
 
-### Co API neumí ani teď
+#### Co API neumí ani teď
 
 - Vyloučení dezinformačních webů: přepínač není v DRAKu ani ve Fénixu 1.34.0.
   Jde jen vlastním seznamem přes `--excluded-urls`.
@@ -56,7 +113,7 @@ skriptem. Příčina:
   `/sklik/event-measurement/conversions/`, ale žádné pole, které by konverzi
   přiřadilo kampani.
 
-## [1.11.0] — 2026-10-02 — API Fénix 1.30.0: příkazy `fenix-*` (kampaně, sestavy, inzeráty, vylučující slova), `Retry-After` a volitelně tokeny ve správci hesel
+## [1.11.0] — nevydána samostatně, součást 1.12.0 — API Fénix 1.30.0: příkazy `fenix-*` (kampaně, sestavy, inzeráty, vylučující slova), `Retry-After` a volitelně tokeny ve správci hesel
 
 Fénix od verze 1.26.1, proti které vznikla podpora Nákupů, dorostl o správu
 kampaní. Appka ho teď umí použít i mimo Nákupy. DRAK zůstává výchozí cesta:

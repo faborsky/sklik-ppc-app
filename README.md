@@ -17,8 +17,8 @@ Součástí repa je i [skill pro Claude Code](#skill-pro-claude-code-sklik-ppc),
 
 Poslední verze je **1.12.0**. Celá historie: **[CHANGELOG.md](CHANGELOG.md)**.
 
-- **1.12.0**: kampaň a reklamu jde přes Fénix (specifikace 1.34.0) i upravit. **`fenix-campaign-update`** nastaví začátek a konec kampaně, frekvenční strop **na úrovni kampaně** (DRAK ho nečte ani nezapisuje), celkový rozpočet, vyloučené weby, stav a denní rozpočet. **`fenix-ad-update`** nastaví stav, začátek a konec u libovolného typu reklamy včetně **bannerů** (DRAK u nich datum nemá) a umí víc reklam jedné sestavy najednou. Oba mají `--dry-run` s ověřením na straně API. DRAKové `campaign-create` a `campaign-update` dostaly `--start-date` a `--end-date`. Výpisy `fenix-campaigns` a `fenix-ads` nově ukazují data a frekvenční strop.
-- **1.11.0**: nová skupina příkazů **`fenix-*`** nad API Fénix 1.30.0: výpis kampaní, sestav, inzerátů a hlavně **vylučujících slov na úrovni kampaně** (`fenix-negatives`), která DRAK přečíst neumí. K tomu zakládání kampaní, sestav a ETA inzerátů s **`--dry-run`** (API jen ověří, nic nezaloží) a přidání/smazání vylučujících slov. Nová kampaň se zakládá **pozastavená**. Engine Fénixu nově čeká přesně tak dlouho, jak API řekne v hlavičce `Retry-After`. **Čtecí příkazy `fenix-*` a `--dry-run` u kampaně jsou ověřené na živém účtu, ostré zápisy zatím jen proti specifikaci** (podrobně níže). Volitelně jde tokeny držet ve správci hesel místo v `.env` (skript `run-op.sh` pro 1Password); přihlášení tokenem v `.env` se nemění.
+- **1.12.0**: **opraveno `negative-remove`**, které po změně DRAKu 11.27.0 (14. 9. 2026) nefungovalo: maže se podle sestavy, textu a typu shody (`--group-id`, `--name`, `--match-type`), trvale a bez možnosti obnovy; `--keyword-id` funguje dál. **`suggest-stats`** zvládne libovolný počet dotazů (posílá je po 100), **HTTP 429 bez těla** už nekončí chybou, ale počká a zopakuje se, a **`feed-status` skrývá přístupové klíče v URL feedu** (`?hash=***`). Nové příkazy na **popisky** (`callout-*`) a `sitelink-assign` už při přiřazení sitelinků nesmaže popisky. Navíc kampaň a reklamu jde přes Fénix (specifikace 1.34.0) i upravit. **`fenix-campaign-update`** nastaví začátek a konec kampaně, frekvenční strop **na úrovni kampaně** (DRAK ho nečte ani nezapisuje), celkový rozpočet, vyloučené weby, stav a denní rozpočet. **`fenix-ad-update`** nastaví stav, začátek a konec u libovolného typu reklamy včetně **bannerů** (DRAK u nich datum nemá) a umí víc reklam jedné sestavy najednou. Oba mají `--dry-run` s ověřením na straně API. DRAKové `campaign-create` a `campaign-update` dostaly `--start-date` a `--end-date`. Výpisy `fenix-campaigns` a `fenix-ads` nově ukazují data a frekvenční strop.
+- **1.11.0** (nevyšla samostatně, je součástí 1.12.0): nová skupina příkazů **`fenix-*`** nad API Fénix 1.30.0: výpis kampaní, sestav, inzerátů a hlavně **vylučujících slov na úrovni kampaně** (`fenix-negatives`), která DRAK přečíst neumí. K tomu zakládání kampaní, sestav a ETA inzerátů s **`--dry-run`** (API jen ověří, nic nezaloží) a přidání/smazání vylučujících slov. Nová kampaň se zakládá **pozastavená**. Engine Fénixu nově čeká přesně tak dlouho, jak API řekne v hlavičce `Retry-After`. **Čtecí příkazy `fenix-*` a `--dry-run` u kampaně jsou ověřené na živém účtu, ostré zápisy zatím jen proti specifikaci** (podrobně níže). Volitelně jde tokeny držet ve správci hesel místo v `.env` (skript `run-op.sh` pro 1Password); přihlášení tokenem v `.env` se nemění.
 - **1.10.1**: oprava jednotek u `nakupy-campaigns`. Denní rozpočet se tiskl 100× vyšší (250 Kč jako 25 000 Kč) a modifikátory nabídek obráceně. `maxCpcMultiplier` navzdory jménu není násobič se základnou 100 %, ale znaménkové procento se stejnou konvencí jako DRAK (`0` = beze změny, `-100` = vypnuto). Specifikace Fénixu tvrdí u obou polí něco jiného než živý účet; díky za ověření patří opět uživateli ArkAngelMichael.
 - **1.10.0**: nová skupina příkazů **Nákupy / feed (API Fénix)**: `feed-status`, `feed-diagnostics`, `nakupy-campaigns`, `nakupy-stats`, `shop-items`. U nákupních kampaní (Seznam Nákupy, dřív Zboží.cz) vidí DRAK jen agregát na kampani a sestavě. Feed, jednotlivé produkty ani rozpad výkonu podle umístění (Seznam × Zboží, typ aukce, zařízení) neukáže vůbec. To teď doplňuje API Fénix; potřebuje vlastní token v `.env`. **Za nápad i za první implementaci děkuji uživateli ArkAngelMichael.**
 - **1.9.0**: výpisy vrací kompletní data. `campaigns` bralo z API jen prvních 100 kampaní (a `--status` filtroval až nad touhle useknutou stovkou), `groups`/`ads`/`banners` 500 řádků. Větší účet tak tiše přišel o zbytek a nikde to nebylo vidět. Nově se všechny výpisy i reporty stránkují až do konce. Díky za nahlášení patří studentovi kurzu AI First.
@@ -274,16 +274,18 @@ Výpis přes `ads` (`adType: combined`), statistiky přes `ad-stats`, smazání 
 | `negatives` | `--group-id`, `--campaign-id`, `--json` |
 | `negative-add` | `--group-id`/`--campaign-id`, `--name`, `--match-type negativeBroad/negativePhrase/negativeExact`, `--json` |
 | `negative-add-batch` | `--group-id`/`--campaign-id`, `--keywords-json`, `--json` |
-| `negative-remove` | `--keyword-id`, `--confirm`, `--json` |
+| `negative-remove` | `--group-id` + `--name` + `--match-type` (výchozí `negativeBroad`), **nebo** `--keyword-id`; `--confirm`, `--json`. Maže **trvale**, obnovit nejde |
 
-> `negatives` umí vypsat jen **skupinové** vylučovačky (`--campaign-id` filtruje přes sestavy dané kampaně). Kampaňové vylučovačky (`negative-add --campaign-id`) jsou v API **write-only**: zapsat jdou, ale zpětně vypsat ne. Ověříš je jen ve webovém rozhraní Skliku.
+> `negatives` umí vypsat jen **skupinové** vylučovačky (`--campaign-id` filtruje přes sestavy dané kampaně). Kampaňové vylučovačky (`negative-add --campaign-id`) jsou v API **write-only**: zapsat jdou, ale zpětně vypsat ne. Přečíst a smazat je jde přes `fenix-negatives` / `fenix-negative-remove --campaign-id` (API Fénix), jinak jen ve webovém rozhraní Skliku.
+>
+> **`negative-remove` maže podle textu a typu shody v sestavě** (od DRAKu 11.27.0, 14. 9. 2026 metoda ID nebere). Se `--keyword-id` si CLI záznam nejdřív dohledá. `negatives` vypisuje typ shody krátce (`broad`/`phrase`/`exact`), `--match-type` bere oba tvary. `negative-add` od téže změny API nevrací ID, hlásí se počet přidaných slov.
 
 ### Výzkum klíčových slov
 
 | Příkaz | Klíčové přepínače |
 |--------|-------------------|
 | `suggest` | `--query`, `--limit`, `--related`, `--order-by avgSearchCount/cpc/score`, `--json` |
-| `suggest-stats` | `--queries` (oddělené čárkou), `--granularity monthly/daily`, `--json` |
+| `suggest-stats` | `--queries` (oddělené čárkou; API bere max. 100 na volání, CLI delší seznam samo rozdělí), `--granularity monthly/daily`, `--json` |
 
 ### Vyhledávací dotazy
 
@@ -302,7 +304,7 @@ Výpis přes `ads` (`adType: combined`), statistiky přes `ad-stats`, smazání 
 | `sitelink-assign` | `--campaign-id` **nebo** `--group-id`, `--sitelink-ids "1,2,3"` (`""` = odpojit vše), `--json` |
 | `sitelinks-assigned` | `--campaign-id` **nebo** `--group-id`, `--json`. Co je aktuálně přiřazené |
 
-> **`sitelink-assign` NAHRAZUJE celou sadu** přiřazených sitelinků kampaně/sestavy, vždy pošli kompletní seznam, ne jen přírůstek. **Přejmenování sitelinku (`sitelink-update --name`) vytvoří NOVÉ ID** (server dělá remove+create), CLI nové ID vypíše; změna `--url` ID zachová.
+> **`sitelink-assign` NAHRAZUJE celou sadu** přiřazených sitelinků kampaně/sestavy, vždy pošli kompletní seznam, ne jen přírůstek. Přiřazené popisky ponechá (od 1.12.0, dřív je smazal). **Přejmenování sitelinku (`sitelink-update --name`) vytvoří NOVÉ ID** (server dělá remove+create), CLI nové ID vypíše; změna `--url` ID zachová.
 
 ### Popisky
 
@@ -314,7 +316,7 @@ Výpis přes `ads` (`adType: combined`), statistiky přes `ad-stats`, smazání 
 | `callout-assign` | `--campaign-id` **nebo** `--group-id`, `--callout-ids "1,2,3"` (`""` = odpojit všechny popisky), `--dry-run`, `--json` |
 | `callouts-assigned` | `--campaign-id` **nebo** `--group-id`, `--json`. Co je aktuálně přiřazené |
 
-> **Popisek je v API sitelink bez URL**, vlastní metody nemá. CLI je přesto drží odděleně: `callout-*` pracují jen se záznamy bez URL a na sitelinky nesáhnou. **`callout-assign` nahradí popisky kampaně/sestavy a přiřazené sitelinky ponechá** (`--dry-run` ukáže výslednou sadu bez zápisu). Pozor na opačný směr: **`sitelink-assign` přepisuje celou sadu včetně popisků**, takže po něm popisky přiřaď znovu. `sitelink-update` popisek odmítne (URL by z něj udělala sitelink), text popisku se mění přes `callout-remove` a `callout-create`. Výpis `sitelinks` ukazuje obojí, popisky mají prázdné URL.
+> **Popisek je v API sitelink bez URL**, vlastní metody nemá. CLI je přesto drží odděleně: `callout-*` pracují jen se záznamy bez URL a na sitelinky nesáhnou. **`callout-assign` nahradí popisky kampaně/sestavy a přiřazené sitelinky ponechá** (`--dry-run` ukáže výslednou sadu bez zápisu). Opačný směr funguje stejně: **`sitelink-assign` nahradí sitelinky a popisky ponechá.** `sitelink-update` popisek odmítne (URL by z něj udělala sitelink), text popisku se mění přes `callout-remove` a `callout-create`. Výpis `sitelinks` ukazuje obojí, popisky mají prázdné URL.
 
 ### Konverze (definice měření)
 
@@ -425,7 +427,7 @@ Seznam Nákupy (dřív Zboží.cz): feed, diagnostika položek, modifikátory na
 
 | Příkaz | Klíčové přepínače |
 |--------|-------------------|
-| `feed-status` | `--premise-id`, `--json`. ID a URL feedu, poslední úspěšný import, limit stahování za den |
+| `feed-status` | `--premise-id`, `--json`. ID a URL feedu, poslední úspěšný import, limit stahování za den. Přístupové klíče v URL (`hash`, `token`, `key`, `password`…) jsou skryté jako `***`, i v `--json` |
 | `feed-diagnostics` | `--premise-id`, `--json`. Zdraví nabídek: OK / chyba / neviditelné / „lze vylepšit“ / bez kategorie |
 | `nakupy-campaigns` | `--premise-id`, `--json`. Nákupní kampaně + modifikátory nabídek (web / zařízení / typ aukce) |
 | `nakupy-stats` | `--date-from`, `--date-to`, `--split "webType,deviceType,productType,conversionId"`, `--by-category`, `--granularity`, `--premise-id`, `--json` |

@@ -51,9 +51,9 @@ CLI accepts/displays **CZK**; the API uses haléře (100 = 1 Kč). Conversion is
 - **Groups:** `groups`, `group-create/update/remove/restore/stats` — `--max-daily-impression` = frequency cap (the campaign-level cap is invisible to DRAK — read it with `fenix-campaigns`, write it with `fenix-campaign-update --capping-*`; the group cap wins where both are set); `group-stats` is the only entity returning `winRate`
 - **Keywords:** `keywords`, `keyword-create`, `keyword-create-batch`, `keyword-update/remove/restore/stats`, **`keyword-set`** (declarative upsert; `--remove-others` = full sync)
 - **Ads:** `ads`, `ad-create`, `combined-create`, `ad-update` (status only), **`ad-replace`** (safe atomic text change), `ad-remove`, `ad-restore`, `ad-stats`
-- **Negatives:** `negatives`, `negative-add`, `negative-add-batch`, `negative-remove`
-- **Research:** `suggest`, `suggest-stats`, `search-queries`
-- **Sitelinks:** `sitelinks`, `sitelink-create/update/remove`, `sitelink-assign` (campaign/group; REPLACES the whole set), `sitelinks-assigned`
+- **Negatives:** `negatives`, `negative-add`, `negative-add-batch`, `negative-remove` — since DRAK 11.27.0 the remove takes `groupId` + `[{name, matchType}]` and hard-deletes (no IDs, no restore; `--keyword-id` is looked up first), and the create returns no IDs. `negatives` reports `broad/phrase/exact`, writes want `negativeBroad/…`
+- **Research:** `suggest`, `suggest-stats` (chunked: the API takes ≤100 queries per call), `search-queries`
+- **Sitelinks:** `sitelinks`, `sitelink-create/update/remove`, `sitelink-assign` (campaign/group; replaces the sitelinks, re-sends the assigned callouts — one shared set in the API), `sitelinks-assigned`
 - **Callouts (popisky):** `callouts`, `callout-create/remove`, `callout-assign` (replaces the callouts, keeps the sitelinks; `--dry-run`), `callouts-assigned`. A callout is a `sitelinks.*` record without a URL; the CLI keeps the two apart.
 - **Conversions:** `conversions`, `conversion-types`, `conversion-create/update/remove`
 - **Retargeting:** `retargeting`, `retargeting-create/update/remove`, **`retargeting-attach/detach`** (audience ↔ group), `retargeting-attached`, **`retargeting-exclude`** (+`-remove`) — negative retargeting at campaign OR group level, `retargeting-excluded`
@@ -89,7 +89,7 @@ Full API behaviour, quirks, rate-limit internals and status codes: **[docs/api-n
 
 ## Release checklist
 
-Bump `__version__` in `sklik/__init__.py` → update README (version line + command tables), CLAUDE.md (command count/index), CHANGELOG.md (new `## [x.y.z] — YYYY-MM-DD` entry), bundled skill → run `python scripts/check_docs_consistency.py` (must pass) → commit → tag `vX.Y.Z` → **GitHub Release from the tag** (`gh release create vX.Y.Z --latest --title "vX.Y.Z — <changelog headline>"`, notes = the CHANGELOG entry). A pushed tag alone does NOT show on /releases and subscribers get no notification — the release step is mandatory, not optional.
+Bump `__version__` in `sklik/__init__.py` → update README (version line + command tables), CLAUDE.md (command count/index), CHANGELOG.md (new `## [x.y.z] — YYYY-MM-DD` entry), bundled skill → run `python scripts/check_docs_consistency.py` and `python -m unittest discover -s tests` (both must pass) → commit → tag `vX.Y.Z` → **GitHub Release from the tag** (`gh release create vX.Y.Z --latest --title "vX.Y.Z — <changelog headline>"`, notes = the CHANGELOG entry). A pushed tag alone does NOT show on /releases and subscribers get no notification — the release step is mandatory, not optional.
 
 ## Documentation map
 

@@ -269,13 +269,17 @@ def cmd_negative_add(args: argparse.Namespace) -> None:
         "groupId": args.group_id,
     }
 
+    # Since DRAK 11.27.0 the create answers no IDs (negatives are addressed by
+    # name + match type now) — report what was sent, not an empty ID list.
     data = _api_call("keywords.negative.create", [[neg]], getattr(args, "user_id", None))
-    neg_ids = data.get("negativeKeywordIds", [])
+    neg_ids = data.get("negativeKeywordIds") or []
 
     if args.json:
-        _output_json({"negativeKeywordIds": neg_ids})
+        _output_json({"added": 1, "level": "group", "groupId": args.group_id,
+                      "negativeKeywordIds": neg_ids})
     else:
-        print(f"Negative keyword added: ID {neg_ids[0] if neg_ids else '?'}")
+        print(f"Negative keyword added to group {args.group_id}: "
+              f"{args.name} [{args.match_type}]")
 
 
 def cmd_negative_add_batch(args: argparse.Namespace) -> None:
@@ -317,26 +321,67 @@ def cmd_negative_add_batch(args: argparse.Namespace) -> None:
         neg["groupId"] = args.group_id
         batch.append(neg)
 
+    # No IDs come back since DRAK 11.27.0; the batch is all-or-nothing, so a
+    # successful call means every sent row was added.
     data = _api_call("keywords.negative.create", [batch], getattr(args, "user_id", None))
-    neg_ids = data.get("negativeKeywordIds", [])
+    neg_ids = data.get("negativeKeywordIds") or []
 
     if args.json:
-        _output_json({"negativeKeywordIds": neg_ids, "count": len(neg_ids)})
+        _output_json({"added": len(batch), "count": len(batch), "level": "group",
+                      "groupId": args.group_id, "negativeKeywordIds": neg_ids})
     else:
-        print(f"Added {len(neg_ids)} group-level negative keywords.")
+        print(f"Added {len(batch)} group-level negative keywords.")
+
+
+# keywords.negative.list answers the match type as `broad`/`phrase`/`exact`,
+# the writes want `negativeBroad`/`negativePhrase`/`negativeExact`.
+_NEGATIVE_MATCH = {"broad": "negativeBroad", "phrase": "negativePhrase",
+                   "exact": "negativeExact"}
+
+
+def _negative_match_type(value: str) -> str:
+    return _NEGATIVE_MATCH.get(value, value)
 
 
 def cmd_negative_remove(args: argparse.Namespace) -> None:
-    """Remove a negative keyword."""
-    if not args.confirm:
-        print("ERROR: Requires --confirm flag.", file=sys.stderr)
-        sys.exit(1)
+    """Permanently delete a group-level negative keyword.
 
-    _api_call("keywords.negative.remove", [[args.keyword_id]], getattr(args, "user_id", None))
-    if args.json:
-        _output_json({"removed": True, "keywordId": args.keyword_id})
+    Since DRAK 11.27.0 (2026-09-14) keywords.negative.remove takes `groupId` +
+    `[{name, matchType}]` and hard-deletes by text and match type — no IDs, no
+    restore. `--keyword-id` is kept as a convenience: the row is looked up first.
+    """
+    if not args.confirm:
+        _fail_msg("Requires --confirm flag (the delete is permanent, there is no restore).")
+    uid = getattr(args, "user_id", None)
+
+    if args.keyword_id:
+        data = _api_call("keywords.negative.list", [
+            {"ids": [args.keyword_id]},
+            {"limit": 1, "offset": 0,
+             "displayColumns": ["id", "name", "matchType", "group.id"]},
+        ], uid)
+        row = next((k for k in data.get("keywords", []) or []
+                    if k.get("id") == args.keyword_id), None)
+        if row is None:
+            _fail_msg(f"Negative keyword {args.keyword_id} not found.",
+                      keywordId=args.keyword_id)
+        group = row.get("group")
+        group_id = group.get("id") if isinstance(group, dict) else row.get("group.id")
+        name, match_type = row.get("name"), _negative_match_type(row.get("matchType") or "")
     else:
-        print(f"Negative keyword {args.keyword_id} removed.")
+        if not args.group_id or not args.name:
+            _fail_msg("Use --keyword-id, or --group-id with --name (and --match-type). "
+                      "Campaign-level negatives: fenix-negative-remove --campaign-id.")
+        group_id, name = args.group_id, args.name
+        match_type = _negative_match_type(args.match_type)
+
+    item = {"name": name, "matchType": match_type}
+    _api_call("keywords.negative.remove", [group_id, [item]], uid)
+    if args.json:
+        _output_json({"removed": True, "groupId": group_id, "negativeKeyword": item,
+                      "keywordId": args.keyword_id})
+    else:
+        print(f"Negative keyword removed from group {group_id}: {name} [{match_type}]")
 
 
 def cmd_keyword_restore(args: argparse.Namespace) -> None:
