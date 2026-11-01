@@ -15,8 +15,10 @@ Součástí repa je i [skill pro Claude Code](#skill-pro-claude-code-sklik-ppc),
 
 ## 🆕 Co je nového
 
-Poslední verze je **1.10.1**. Celá historie: **[CHANGELOG.md](CHANGELOG.md)**.
+Poslední verze je **1.12.0**. Celá historie: **[CHANGELOG.md](CHANGELOG.md)**.
 
+- **1.12.0**: kampaň a reklamu jde přes Fénix (specifikace 1.34.0) i upravit. **`fenix-campaign-update`** nastaví začátek a konec kampaně, frekvenční strop **na úrovni kampaně** (DRAK ho nečte ani nezapisuje), celkový rozpočet, vyloučené weby, stav a denní rozpočet. **`fenix-ad-update`** nastaví stav, začátek a konec u libovolného typu reklamy včetně **bannerů** (DRAK u nich datum nemá) a umí víc reklam jedné sestavy najednou. Oba mají `--dry-run` s ověřením na straně API. DRAKové `campaign-create` a `campaign-update` dostaly `--start-date` a `--end-date`. Výpisy `fenix-campaigns` a `fenix-ads` nově ukazují data a frekvenční strop.
+- **1.11.0**: nová skupina příkazů **`fenix-*`** nad API Fénix 1.30.0: výpis kampaní, sestav, inzerátů a hlavně **vylučujících slov na úrovni kampaně** (`fenix-negatives`), která DRAK přečíst neumí. K tomu zakládání kampaní, sestav a ETA inzerátů s **`--dry-run`** (API jen ověří, nic nezaloží) a přidání/smazání vylučujících slov. Nová kampaň se zakládá **pozastavená**. Engine Fénixu nově čeká přesně tak dlouho, jak API řekne v hlavičce `Retry-After`. **Čtecí příkazy `fenix-*` a `--dry-run` u kampaně jsou ověřené na živém účtu, ostré zápisy zatím jen proti specifikaci** (podrobně níže). Volitelně jde tokeny držet ve správci hesel místo v `.env` (skript `run-op.sh` pro 1Password); přihlášení tokenem v `.env` se nemění.
 - **1.10.1**: oprava jednotek u `nakupy-campaigns`. Denní rozpočet se tiskl 100× vyšší (250 Kč jako 25 000 Kč) a modifikátory nabídek obráceně. `maxCpcMultiplier` navzdory jménu není násobič se základnou 100 %, ale znaménkové procento se stejnou konvencí jako DRAK (`0` = beze změny, `-100` = vypnuto). Specifikace Fénixu tvrdí u obou polí něco jiného než živý účet; díky za ověření patří opět uživateli ArkAngelMichael.
 - **1.10.0**: nová skupina příkazů **Nákupy / feed (API Fénix)**: `feed-status`, `feed-diagnostics`, `nakupy-campaigns`, `nakupy-stats`, `shop-items`. U nákupních kampaní (Seznam Nákupy, dřív Zboží.cz) vidí DRAK jen agregát na kampani a sestavě. Feed, jednotlivé produkty ani rozpad výkonu podle umístění (Seznam × Zboží, typ aukce, zařízení) neukáže vůbec. To teď doplňuje API Fénix; potřebuje vlastní token v `.env`. **Za nápad i za první implementaci děkuji uživateli ArkAngelMichael.**
 - **1.9.0**: výpisy vrací kompletní data. `campaigns` bralo z API jen prvních 100 kampaní (a `--status` filtroval až nad touhle useknutou stovkou), `groups`/`ads`/`banners` 500 řádků. Větší účet tak tiše přišel o zbytek a nikde to nebylo vidět. Nově se všechny výpisy i reporty stránkují až do konce. Díky za nahlášení patří studentovi kurzu AI First.
@@ -69,7 +71,7 @@ cp .env.example .env   # a doplň token
 3. Vygeneruj / zkopíruj svůj **API token**.
 4. Token vlož do souboru `.env` jako `SKLIK_API_TOKEN` (viz [Konfigurace](#konfigurace) níže).
 
-> Token je heslo k tvému Sklik účtu přes API. Nikam ho nedávej do kódu ani do gitu, patří **výhradně** do `.env` (které je v `.gitignore`).
+> Token je heslo k tvému Sklik účtu přes API. Nikam ho nedávej do kódu ani do gitu, patří **výhradně** do `.env` (které je v `.gitignore`), případně do správce hesel (viz [Tokeny ve správci hesel](#tokeny-ve-správci-hesel-volitelné)).
 
 ### Konfigurace
 
@@ -81,6 +83,48 @@ SKLIK_API_TOKEN_CLIENTB=tvuj-token    # volitelný další login → --account c
 ```
 
 Účty se zjistí z prostředí za běhu. Žádná jména nejsou natvrdo v kódu, takže můžeš mít libovolný počet loginů. Session se po přihlášení cachuje 25 minut do `.session_cache_<account>.json` (taky gitignored) a automaticky se obnoví při vypršení (401).
+
+### Tokeny ve správci hesel (volitelné)
+
+**Nic z toho dělat nemusíš.** Token v `.env` a `./run.sh` fungují dál úplně stejně. Tohle je doplněk pro případ, že dlouhodobý token nechceš mít na disku jako čistý text, třeba když máš složku s appkou v synchronizovaném úložišti nebo v zálohách.
+
+Princip je obecný: appka čte tokeny z proměnných prostředí a `.env` je jen jeden ze způsobů, jak je tam dostat. Knihovna `python-dotenv` navíc **nepřepisuje proměnné, které už v prostředí jsou**. Funguje tedy cokoli, co umí spustit příkaz s doplněnými proměnnými: `op run` u 1Passwordu, obdobné příkazy jiných správců hesel, nebo jeden řádek v shellu. Stačí, aby při spuštění `./run.sh` existovaly `SKLIK_API_TOKEN` a případně `SKLIK_FENIX_REFRESH_TOKEN`. Příklad s Klíčenkou na macOS:
+
+```bash
+SKLIK_API_TOKEN="$(security find-generic-password -s sklik-api -w)" ./run.sh account
+```
+
+Pro **1Password CLI** je v repu hotový skript `run-op.sh`:
+
+1. Nainstaluj si [1Password CLI](https://developer.1password.com/docs/cli/get-started/) (`op`) a přihlas ho. Nejpohodlnější je propojení s aplikací 1Password, pak se odemyká otiskem.
+2. Token ulož do 1Passwordu a do `.env` napiš místo hodnoty odkaz na něj:
+
+   ```bash
+   SKLIK_API_TOKEN=op://<trezor>/<položka>/<pole>
+   SKLIK_FENIX_REFRESH_TOKEN=op://<trezor>/<položka>/<pole>
+   ```
+
+3. Místo `./run.sh` spouštěj `./run-op.sh`, přepínače zůstávají stejné:
+
+   ```bash
+   ./run-op.sh account
+   ./run-op.sh campaigns --json
+   ```
+
+`run-op.sh` jen zavolá `op run --env-file=.env -- ./run.sh …`. `op` si vyžádá odemčení (otisk nebo heslo) a dosadí skutečné hodnoty do prostředí toho jednoho procesu. Na disk se nezapíšou. Když omylem spustíš obyčejné `./run.sh`, appka pozná nevyřešený odkaz `op://…`, nic nikam nepošle a napíše ti, ať použiješ `./run-op.sh`.
+
+**Co tím získáš a co ne:**
+
+- Dlouhodobý token už neleží v čistém textu na disku, takže ani v cloudové synchronizaci a zálohách. Každé použití navíc musíš odemknout.
+- Krátkodobé přihlášení se na disk ukládá dál: session DRAKu (25 minut) do `.session_cache_<account>.json` a access token Fénixu (1 hodina) do `.fenix_cache_<account>.json`. Kdo se k těm souborům dostane, může do vypršení jednat za tebe. Oba soubory jsou v `.gitignore`.
+- Proti škodlivému programu, který běží pod tvým účtem ve chvíli, kdy máš 1Password odemčený, to neochrání.
+
+**Na čem se dá zaseknout:**
+
+- Máš v 1Passwordu přihlášených víc účtů? Řekni `op`, který má použít: `OP_ACCOUNT=my.1password.com ./run-op.sh account` (adresa účtu, jak ji vypíše `op account list`). Skript žádný účet sám nevybírá.
+- Jedno spuštění `op run` řeší odkazy jen v rámci jednoho účtu. Všechny tokeny z `.env` proto musí být v tomtéž účtu 1Passwordu.
+- Název pole závisí na typu položky: u typu *API Credential* je to `credential`, u *Secure Note* `notesPlain`.
+- Když nepotvrdíš výzvu k odemčení včas, skončí příkaz chybou `authorization timeout`. Stačí ho pustit znovu.
 
 ### Účty vs. spravované účty
 
@@ -154,8 +198,8 @@ Souhrn celého účtu **jedním voláním**, místo řetězení `account` + `cam
 | Příkaz | Klíčové přepínače |
 |--------|-------------------|
 | `campaigns` | `--status active/suspend`, `--json` |
-| `campaign-create` | `--name`, `--day-budget` (CZK), `--type fulltext/context/product`, `--status active/suspend`, `--regions`, `--device-bids`, `--ad-selection`, `--json` |
-| `campaign-update` | `--campaign-id`, `--name`, `--day-budget`, `--status`, `--regions`, `--device-bids`, `--schedule-json`, `--ad-selection`, `--json` |
+| `campaign-create` | `--name`, `--day-budget` (CZK), `--type fulltext/context/product`, `--status active/suspend`, `--regions`, `--device-bids`, `--ad-selection`, `--start-date`, `--end-date` (`YYYY-MM-DD`), `--json` |
+| `campaign-update` | `--campaign-id`, `--name`, `--day-budget`, `--status`, `--regions`, `--device-bids`, `--schedule-json`, `--ad-selection`, `--start-date`, `--end-date` (`YYYY-MM-DD`, `none` datum smaže), `--json`. Frekvenční strop kampaně DRAK nemá, nastavuje ho `fenix-campaign-update` |
 | `campaign-remove` | `--campaign-id`, `--confirm`, `--json` |
 | `campaign-stats` | `--campaign-id`, `--date-from`, `--date-to`, `--granularity {total,daily,weekly,monthly,quarterly,yearly}`, `--json` |
 | `campaign-targeting` | `--campaign-id`, `--json`. Přehled geo / zařízení / rozvrhu |
@@ -369,7 +413,7 @@ Seznam Nákupy (dřív Zboží.cz): feed, diagnostika položek, modifikátory na
 
 | Příkaz | Klíčové přepínače |
 |--------|-------------------|
-| `feed-status` | `--premise-id`, `--json`. URL feedu, poslední úspěšný import, limit stahování za den |
+| `feed-status` | `--premise-id`, `--json`. ID a URL feedu, poslední úspěšný import, limit stahování za den |
 | `feed-diagnostics` | `--premise-id`, `--json`. Zdraví nabídek: OK / chyba / neviditelné / „lze vylepšit“ / bez kategorie |
 | `nakupy-campaigns` | `--premise-id`, `--json`. Nákupní kampaně + modifikátory nabídek (web / zařízení / typ aukce) |
 | `nakupy-stats` | `--date-from`, `--date-to`, `--split "webType,deviceType,productType,conversionId"`, `--by-category`, `--granularity`, `--premise-id`, `--json` |
@@ -379,6 +423,50 @@ Seznam Nákupy (dřív Zboží.cz): feed, diagnostika položek, modifikátory na
 
 - **Statistiky a ceny u položek feedu jsou v korunách, ne v haléřích.** Výjimka je denní rozpočet kampaně: `budget.dayBudget` i `exhaustedDayBudget` jsou v haléřích (endpoint nákupních kampaní vrací hodnoty rovnou z DRAKu). V lidském výstupu se převádí, `--json` vrací syrová data z Fénixu.
 - **Modifikátor nabídky je znaménkové procento, stejně jako v DRAKu: 0 = beze změny, `+20` = +20 %, `-100` = umístění vypnuté.** Hodnota se dá z `nakupy-campaigns` přepsat do `campaign-update --device-bids` bez přepočtu. Umístění, u kterého modifikátor nastavený není, se ve výpisu vůbec neobjeví. Modifikátory podle **webu a typu aukce jde přes API jen číst**, měnit se dají výhradně ve webovém Skliku; podle **zařízení** je zapisuje DRAK.
+
+### Kampaně přes API Fénix (`fenix-*`)
+
+Druhá cesta ke kampaním, vedle DRAKu. Používá **stejný Fénix token** jako příkazy pro Nákupy, ale `premiseId` nepotřebuje. DRAK zůstává výchozí: Fénix neumí klíčová slova, návrhy klíčových slov ani report vyhledávacích dotazů. Přináší dvě věci, které DRAK nemá:
+
+- **`fenix-negatives --campaign-id X` vypíše vylučující slova na úrovni kampaně.** DRAK je umí jen zapsat.
+- **`--dry-run` u zakládání** pošle požadavek s `dryRun=true`: API ho zkontroluje a nic neuloží.
+
+> ⚠️ **Čtení je ověřené na živém účtu, zápisy zatím ne.** Příkazy jsou napsané podle OpenAPI specifikace Fénixu 1.30.0. Na živém účtu (2. 10. 2026) prošly `fenix-me`, `fenix-credit`, `fenix-accounts`, `fenix-campaigns`, `fenix-groups`, `fenix-negatives --campaign-id` a `fenix-campaign-create --dry-run` (platný požadavek API přijme a nic nezaloží, neplatný odmítne s názvem pole). **Naostro zatím nikdo nespustil** žádné zakládání bez `--dry-run`, `--dry-run` u sestavy a inzerátu, `fenix-negative-add`, `fenix-negative-remove` ani `fenix-ads`. U Nákupů se specifikace ve dvou polích spletla (viz verze 1.10.1), takže první zápis ber jako test: začni `fenix-me`, pak `--dry-run`.
+
+Token potřebuje úroveň přístupu **`rw`** pro zápis (volí se při generování refresh tokenu ve Skliku); na výpisy stačí `r`. Co token smí, ukáže `fenix-me`.
+
+| Příkaz | Klíčové přepínače |
+|--------|-------------------|
+| `fenix-me` | `--json`. Za koho token jedná a jaká má oprávnění (scopes) |
+| `fenix-credit` | `--json`. Kredit účtu v Kč; u klienta agentury limit od agentury |
+| `fenix-accounts` | `--json`. Účty dostupné tokenu (ID pro `--user-id`, úroveň přístupu) |
+| `fenix-campaigns` | `--status active\|suspend`, `--json` |
+| `fenix-groups` | `--campaign-id`, `--json` |
+| `fenix-ads` | `--campaign-id`, `--group-id`, `--json` |
+| `fenix-negatives` | `--campaign-id`, `--group-id` (bez něj = úroveň kampaně), `--json` |
+| `fenix-campaign-create` | `--name`, `--day-budget` (Kč), `--type fulltext\|context\|product`, `--status` (výchozí `suspend`), `--ad-selection`, `--dry-run`, `--json` |
+| `fenix-group-create` | `--campaign-id`, `--name`, `--cpc` nebo `--cpm` (Kč), `--status`, `--dry-run`, `--json` |
+| `fenix-ad-create` | `--campaign-id`, `--group-id`, `--headline1`, `--headline2`, `--headline3`, `--description1` (alias `--description`), `--description2`, `--final-url`, `--path1`, `--path2`, `--mobile-final-url`, `--tracking-template`, `--dry-run`, `--json`. Inzerát vzniká vždy aktivní, `status` API při zakládání odmítá |
+| `fenix-negative-add` | `--campaign-id`, `--group-id`, `--name`, `--match-type negative\|negativePhrase\|negativeExact`, `--dry-run`, `--json` |
+| `fenix-negative-remove` | `--campaign-id`, `--group-id`, `--name`, `--match-type` (povinný), `--confirm`, `--dry-run`, `--json` |
+| `fenix-campaign-update` | `--campaign-id`, `--type` (bez něj se dohledá), `--name`, `--status`, `--day-budget` (Kč), `--total-budget` (Kč, `none` = bez limitu), `--start-date`, `--end-date` (`YYYY-MM-DD`, `none` datum smaže), `--capping-max`, `--capping-period daily\|weekly\|monthly\|whole`, `--capping-min-delay`, `--capping-min-delay-period minute\|hour` (hodnota a období vždy spolu), `--no-capping`, `--excluded-urls URL …` (nahradí celý seznam), `--no-excluded-urls`, `--dry-run`, `--json` |
+| `fenix-ad-update` | `--campaign-id`, `--group-id`, `--ad-id ID …` (víc reklam jedné sestavy), `--type` (bez něj se dohledá), `--status`, `--start-date`, `--end-date` (`YYYY-MM-DD`, `none` smaže), `--name` (jen banner a branding), `--dry-run`, `--json`. Funguje pro všechny typy reklam včetně bannerů |
+
+Příklad: konec kampaně a strop 3 zobrazení denně, pak konec bannerů o týden dřív (nejdřív vždy `--dry-run`):
+
+```bash
+./run.sh fenix-campaign-update --campaign-id 123 --end-date 2026-11-10 --capping-max 3 --capping-period daily --dry-run
+./run.sh fenix-ad-update --campaign-id 123 --group-id 456 --ad-id 11 12 13 --end-date 2026-11-04 --dry-run
+```
+
+Datum se posílá bez času; API ho uloží jako půlnoc místního času (`2026-11-10T00:00:00+01:00`). Jestli kampaň ten den ještě běží, specifikace neříká, ověř to ve webovém Skliku.
+
+**Čtyři věci, které se liší od příkazů nad DRAKem:**
+
+- **Nová kampaň je pozastavená.** `fenix-campaign-create` posílá `status: suspend`, dokud nepřidáš `--status active`. Sestava se bez `--status` založí aktivní (výchozí hodnota API).
+- **`--dry-run` znamená dvě různé věci.** U `fenix-campaign-create`, `fenix-group-create`, `fenix-ad-create`, `fenix-campaign-update` a `fenix-ad-update` je to skutečné ověření na straně API. U `fenix-negative-add` a `fenix-negative-remove` API žádný `dryRun` nemá, takže přepínač jen vypíše požadavek a **nic neodešle a nic neověří**.
+- **Vylučující slova nemají ID.** Mažou se textem a typem shody (`--name` + `--match-type`) a smazání je trvalé. Volná shoda se ve Fénixu jmenuje `negative`; DRAKové `negativeBroad` příkazy přijmou a převedou.
+- **`--json` vrací částky v haléřích.** Přepínače berou koruny a lidský výstup koruny ukazuje, ale `--json` je syrová odpověď API: `budget.dayBudget`, `exhaustedDayBudget`, `cpc` a `cpm` jsou v haléřích. Pozor na rozdíl proti `campaigns --json` a `groups --json`, které vrací koruny. Kredit ve `fenix-credit` je v korunách.
 
 ## Příklady
 
@@ -414,6 +502,12 @@ Seznam Nákupy (dřív Zboží.cz): feed, diagnostika položek, modifikátory na
 ./run.sh nakupy-stats --split webType,deviceType --date-from 2026-08-01 --date-to 2026-08-31
 ./run.sh shop-items --unpaired --all --json
 
+# Kampaně přes API Fénix — ověřit požadavek bez zápisu, pak založit (pozastavenou)
+./run.sh fenix-me
+./run.sh fenix-campaign-create --name "Search - Brand" --day-budget 250 --dry-run
+./run.sh fenix-campaign-create --name "Search - Brand" --day-budget 250
+./run.sh fenix-negatives --campaign-id 123           # vylučující slova kampaně (DRAK neumí)
+
 # Měření a publika
 ./run.sh conversions
 ./run.sh retargeting
@@ -445,7 +539,7 @@ sklik-ppc-app/
 ├── sklik_cli.py        # Tenký entrypoint (volá sklik.cli.main)
 ├── sklik/              # Balík s implementací
 │   ├── api.py          #   engine: auth, session, rate-limit, _api_call, stránkování, chyby
-│   ├── fenix.py        #   engine pro REST API Fénix (Seznam Nákupy: feed, diagnostika, statistiky)
+│   ├── fenix.py        #   engine pro REST API Fénix (Nákupy + příkazy fenix-*): auth, Retry-After, stránkování
 │   ├── formatting.py   #   převod CZK⇄haléře + JSON výstup
 │   ├── reports.py      #   dvoukrokový report helper
 │   ├── images.py       #   načítání/kódování obrázků (bannery + combined)
@@ -453,11 +547,12 @@ sklik-ppc-app/
 │   └── commands/       #   jeden modul na doménu (ads, campaigns, keywords, …)
 ├── requirements.txt    # Závislosti (requests, python-dotenv)
 ├── setup.sh · run.sh   # Instalační / spouštěcí skript (aktivuje venv)
+├── run-op.sh           # Volitelné: spuštění s tokeny z 1Passwordu (op run → run.sh)
 ├── .env.example        # Šablona pro tokeny
 ├── CLAUDE.md           # Signpost pro Claude Code (+ dokumentační mapa)
 ├── docs/api-notes.md   # Hutná reference chování API Drak
 ├── CHANGELOG.md        # Historie verzí
-├── .env                # Tokeny (NEVERZOVAT)
+├── .env                # Tokeny nebo odkazy op:// (NEVERZOVAT)
 └── skill/              # Skill pro Claude Code (/sklik-ppc) + INSTALL.md
 ```
 
@@ -468,7 +563,7 @@ sklik-ppc-app/
 - API **nepodporuje** filtry na nadřazené entity (`campaign.ids`, `group.ids`, `status`) v `restrictionFilter`, proto se aplikují na straně klienta, ale až nad kompletním seznamem.
 - **Výpisy jsou kompletní, appka je sama stránkuje.** Metody `*.list` vrací najednou nejvýš 5000 řádků (`statsDataLimit`) a **nehlásí, že něco useknuly** (v odpovědi není celkový počet). CLI proto prochází offsety až do konce: `campaigns`, `groups`, `keywords`, `negatives`, `ads`, `banners` i statistiky vrací celý účet. Do verze 1.8.1 tu byly natvrdo zadané stropy (kampaně 100, sestavy/inzeráty/bannery 500 řádků) a větší účet tiše přišel o zbytek.
 - Příklady použití API Drak: [github.com/seznam/sklik-api-examples](https://github.com/seznam/sklik-api-examples).
-- **API Fénix** (Seznam Nákupy) je samostatné REST rozhraní na `https://api.sklik.cz/v1` s vlastní autentizací (refresh token → hodinový access token) a vlastními konvencemi (koruny místo haléřů, násobiče místo přirážek). Dokumentace: [api.sklik.cz/fenix](https://api.sklik.cz/fenix/), specifikace: `api.sklik.cz/v1/openapi.json`.
+- **API Fénix** (Seznam Nákupy a příkazy `fenix-*`) je samostatné REST rozhraní na `https://api.sklik.cz/v1` s vlastní autentizací (refresh token → hodinový access token) a vlastními konvencemi: u Nákupů koruny místo haléřů, u kampaní haléře jako v DRAKu. Limit je 5 požadavků za sekundu (některé endpointy Nákupů míň); při překročení vrátí `429` s hlavičkou `Retry-After` a CLI počká přesně tak dlouho. Dokumentace: [api.sklik.cz/fenix](https://api.sklik.cz/fenix/), specifikace: `api.sklik.cz/v1/openapi.json`.
 
 > Kompletní chování API (kvirky reportů, bezpečná výměna inzerátů, bannery, konverze, retargeting, rate limity, stavové kódy): **[docs/api-notes.md](docs/api-notes.md)**.
 

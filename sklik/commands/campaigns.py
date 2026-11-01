@@ -185,6 +185,34 @@ def _get_campaign_type(campaign_id: int, user_id: int | None = None) -> str:
 # Commands — Campaigns
 # ---------------------------------------------------------------------------
 
+_DATE_UNSET = object()
+
+
+def _parse_date(value: str | None, flag: str, allow_clear: bool) -> object:
+    """`--start-date` / `--end-date`: YYYY-MM-DD (the date-only form the DRAK
+    JSON API accepts for datetime fields). On update, 'none' sends nil, which
+    campaigns.update documents as "unset". Returns _DATE_UNSET when the
+    flag was not given."""
+    if value is None:
+        return _DATE_UNSET
+    if allow_clear and value.lower() == "none":
+        return None
+    try:
+        datetime.strptime(value, "%Y-%m-%d")
+    except ValueError:
+        _fail_msg(f"{flag} must be YYYY-MM-DD" + (" or 'none'" if allow_clear else "")
+                  + f" (got {value!r}).")
+    return value
+
+
+def _put_campaign_dates(campaign: dict, args: argparse.Namespace, allow_clear: bool) -> None:
+    for key, attr, flag in (("startDate", "start_date", "--start-date"),
+                            ("endDate", "end_date", "--end-date")):
+        value = _parse_date(getattr(args, attr, None), flag, allow_clear)
+        if value is not _DATE_UNSET:
+            campaign[key] = value
+
+
 def cmd_campaigns(args: argparse.Namespace) -> None:
     """List campaigns."""
     restriction: dict = {"isDeleted": False}
@@ -247,6 +275,7 @@ def cmd_campaign_create(args: argparse.Namespace) -> None:
         campaign["devicesPriceRatio"] = device_bids
     if getattr(args, "ad_selection", None):
         campaign["adSelection"] = args.ad_selection
+    _put_campaign_dates(campaign, args, allow_clear=False)
 
     data = _api_call("campaigns.create", [[campaign]], getattr(args, "user_id", None))
     campaign_ids = data.get("campaignIds", [])
@@ -263,6 +292,8 @@ def cmd_campaign_update(args: argparse.Namespace) -> None:
     # (a whole-account listing used to be paged and silently missed campaign
     # #101 onwards, failing the update with a bogus "not found").
     user_id = getattr(args, "user_id", None)
+    dates: dict = {}
+    _put_campaign_dates(dates, args, allow_clear=True)   # validate before any call
     campaign_type = _lookup_campaign_type(args.campaign_id, user_id)
     if not campaign_type:
         _fail_msg(f"Campaign {args.campaign_id} not found.", campaignId=args.campaign_id)
@@ -285,6 +316,7 @@ def cmd_campaign_update(args: argparse.Namespace) -> None:
         update["schedule"] = schedule  # None = explicit clear (API accepts nil)
     if getattr(args, "ad_selection", None):
         update["adSelection"] = args.ad_selection
+    update.update(dates)
 
     if len(update) == 2:  # only id + type, no actual changes
         _fail_msg("No fields to update.")

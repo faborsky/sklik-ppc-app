@@ -2,6 +2,164 @@
 
 Verze aplikace je v `sklik/__init__.py` (`__version__`, SemVer). Formát vychází z [Keep a Changelog](https://keepachangelog.com/). Datum je vydání dané verze.
 
+## [1.12.0] — 2026-10-22 — úpravy kampaní a reklam přes API Fénix 1.34.0: datum začátku a konce, frekvenční strop kampaně, data bannerů
+
+Při zakládání obsahových kampaní chyběly tři věci: konec kampaně, frekvenční
+strop kampaně a konec bannerů. Šly nastavit jen ve webovém Skliku nebo vlastním
+skriptem. Příčina:
+
+- **DRAK** datum začátku a konce kampaně umí (`campaigns.create` /
+  `campaigns.update`, `startDate` / `endDate`, v update `null` = smazat), CLI
+  ho ale jen četlo.
+- **DRAK** frekvenční strop kampaně nemá vůbec (jen strop sestavy
+  `maxUserDailyImpression`) a banner ani reklama v něm datum nemají.
+- **Fénix** od specifikace 1.34.0 umí obojí (`PATCH /sklik/campaigns/{id}/`
+  s objektem `capping`, `PATCH …/ads/{adId}/` s `startDate` / `endDate` u všech
+  typů reklam). CLI úpravy přes Fénix nebalilo vůbec.
+
+### Přidáno
+
+- **`fenix-campaign-update`**: stav, název, denní a celkový rozpočet (Kč),
+  začátek a konec (`YYYY-MM-DD`, `none` smaže), frekvenční strop kampaně
+  (`--capping-max`, `--capping-period daily|weekly|monthly|whole`,
+  `--capping-min-delay`, `--capping-min-delay-period`, `--no-capping`) a
+  vyloučené weby (`--excluded-urls`, nahrazuje celý seznam;
+  `--no-excluded-urls`). Typ kampaně, který API v těle vyžaduje, si příkaz
+  dohledá, nebo ho vezme z `--type`.
+- **`fenix-ad-update`**: stav, začátek a konec u libovolného typu reklamy
+  včetně bannerů, u banneru a brandingu i název. Bere víc `--ad-id` z jedné
+  sestavy; typy dohledá jedním výpisem sestavy. Když API reklamu místo úpravy
+  nahradí novou (200 s novým `id`), výstup to hlásí v `replaced`.
+- Oba příkazy mají `--dry-run` = `dryRun=true`, API požadavek ověří a nic
+  nezmění.
+- DRAK `campaign-create` / `campaign-update`: `--start-date`, `--end-date`
+  (v update `none` datum smaže).
+- `fenix-campaigns` vypisuje začátek, konec a frekvenční strop, `fenix-ads`
+  začátek a konec.
+
+### Ověření
+
+- Stejné požadavky, jaké příkazy posílají, prošly 22. 10. 2026 na živém účtu
+  vlastním skriptem: `PATCH` kampaně typu `context` s `endDate` a
+  `capping {maxImpressions, maxImpressionsPeriod: daily}`, `PATCH` bannerů
+  s `endDate`, kontrolní výpis s `ids` a `capping.maxImpressions`. Samotné
+  příkazy jsou otestované proti specifikaci 1.34.0 s podvrženými odpověďmi.
+- Neověřeno naživo: `--start-date`, `--no-capping`, `--excluded-urls`,
+  `--total-budget`, `--dry-run` u úprav, `fenix-ad-update` u jiných typů než
+  banner, DRAKové `--start-date` / `--end-date`.
+
+### Co API neumí ani teď
+
+- Vyloučení dezinformačních webů: přepínač není v DRAKu ani ve Fénixu 1.34.0.
+  Jde jen vlastním seznamem přes `--excluded-urls`.
+- Volba konverzí pro konkrétní kampaň: Fénix má
+  `/sklik/event-measurement/conversions/`, ale žádné pole, které by konverzi
+  přiřadilo kampani.
+
+## [1.11.0] — 2026-10-02 — API Fénix 1.30.0: příkazy `fenix-*` (kampaně, sestavy, inzeráty, vylučující slova), `Retry-After` a volitelně tokeny ve správci hesel
+
+Fénix od verze 1.26.1, proti které vznikla podpora Nákupů, dorostl o správu
+kampaní. Appka ho teď umí použít i mimo Nákupy. DRAK zůstává výchozí cesta:
+Fénix 1.30.0 nemá klíčová slova, návrhy klíčových slov ani report
+vyhledávacích dotazů.
+
+Každý požadavek (metoda, cesta, query parametry, tělo) je zkontrolovaný proti
+OpenAPI specifikaci 1.30.0. Část je navíc ověřená na živém účtu (2. 10. 2026),
+část ne — a u Nákupů se specifikace ve dvou polích spletla (viz 1.10.1), takže
+na tom rozdílu záleží:
+
+**Ověřeno na živém účtu:**
+
+- `fenix-me` (uživatel, `actor`, seznam oprávnění), `fenix-accounts` (účet bez
+  propojených účtů vrací prázdný seznam).
+- `fenix-credit` vrací stejné číslo jako `credit` nad DRAKem → **koruny**.
+- `fenix-campaigns`: prázdný účet vrací prázdný seznam; kampaně založené přes
+  DRAK pak vypíše se `status: suspend` a `budget.dayBudget: 3000` u rozpočtu
+  30 Kč → **haléře**.
+- `fenix-groups`: `cpc: 300` u nabídky 3 Kč → **haléře**.
+- `fenix-negatives --campaign-id` vypsal 33 vylučujících slov kampaně zapsaných
+  přes DRAK (`negative-add-batch --campaign-id`). Typ `negativeBroad` z DRAKu
+  vrací jako `negative` → volná shoda se ve Fénixu opravdu jmenuje `negative`.
+- ID kampaní a sestav jsou v obou API stejná.
+- `fenix-campaign-create --dry-run`: platný požadavek API přijme
+  (`{"items": []}`) a nic nezaloží (zkontrolováno výpisem přes obě API);
+  s `--day-budget 0` odpoví `422` a pojmenuje pole (`budget.dayBudget`).
+
+**Neověřeno, jen podle specifikace:** jakékoli zakládání bez `--dry-run`,
+`--dry-run` u sestavy a inzerátu, `fenix-negative-add`, `fenix-negative-remove`,
+`fenix-ads`, `fenix-negatives --group-id`, úpravy příkazů pro Nákupy a čekání
+podle `Retry-After` (to je vyzkoušené jen na podvržených odpovědích).
+
+### Přidáno
+
+- **Skupina příkazů `fenix-*`** (stejný token jako Nákupy, bez `premiseId`):
+  - čtení: `fenix-me` (za koho token jedná a jaká má oprávnění),
+    `fenix-credit`, `fenix-accounts` (účty dostupné tokenu, ID pro
+    `--user-id`), `fenix-campaigns`, `fenix-groups`, `fenix-ads` a
+    **`fenix-negatives`** — ten vypíše i vylučující slova **na úrovni kampaně**,
+    která DRAK umí jen zapsat;
+  - zápis: `fenix-campaign-create`, `fenix-group-create`, `fenix-ad-create`
+    (ETA), `fenix-negative-add`, `fenix-negative-remove` (vyžaduje `--confirm`).
+- **`--dry-run` u zakládání** kampaní, sestav a inzerátů posílá `dryRun=true`:
+  API požadavek ověří a nic neuloží.
+- **Nová kampaň se zakládá pozastavená** (`status: suspend`), dokud nepřidáš
+  `--status active`.
+- `feed-status` ukazuje ID feedu (pole `id`, ve specifikaci od 1.27.0).
+- **Volitelně: tokeny ve správci hesel místo v `.env`.** Nový skript
+  `run-op.sh` spustí appku přes 1Password CLI (`op run`): v `.env` jsou jen
+  odkazy `op://trezor/položka/pole` a skutečný token se dosadí do prostředí
+  jednoho procesu. Dlouhodobý token tak neleží na disku v čistém textu.
+  Krátkodobé přihlášení (session DRAKu, access token Fénixu) se do
+  `.session_cache_*.json` a `.fenix_cache_*.json` ukládá dál. Stejný princip
+  funguje s čímkoli, co umí nastavit proměnné prostředí; návod je v README.
+  **Přihlášení tokenem v `.env` přes `./run.sh` se nemění** — `run.sh` ani
+  `setup.sh` se nezměnily a `op` není závislost.
+- Když v tokenu zůstane nevyřešený odkaz `op://…` (spuštění přes `./run.sh`
+  místo `./run-op.sh`), appka skončí srozumitelnou chybou dřív, než cokoli
+  odešle. Dřív by odkaz poslala do API jako token.
+
+### Opraveno (kontrola existujícího kódu proti specifikaci 1.30.0)
+
+Požadavky, které posílají příkazy pro Nákupy, specifikaci 1.30.0 odpovídají
+beze změny. Rozdíly byly na straně klienta:
+
+- **Engine ignoroval hlavičku `Retry-After`.** Po `429` čekal vlastních
+  3/6/9 s. Teď čeká přesně tak dlouho, jak API řekne; vlastní odstup použije
+  jen když hlavička chybí. Čekání delší než 120 s odmítne a řekne proč.
+- **`shop-items --all` stránkoval rychleji, než endpoint dovoluje.** Specifikace
+  dává `GET /nakupy/shop-items/` limit 1 požadavek za sekundu, CLI mezi
+  stránkami čekalo 0,6 s a spoléhalo na opakování po `429`. Nově 1,1 s.
+- **`feed-status` tiskl `None`** u feedu bez denního limitu stahování. `null`
+  v poli `maxFeedDownloadsPerDay` znamená „stahuje se tak často, jak to jde“.
+- **Engine neuznával odpověď `204`.** Stávající příkazy ji nedostávají, ale
+  zápisové endpointy Fénixu ji vrací běžně.
+- Dokumentace tvrdila, že Fénix nemá zveřejněný limit požadavků. Má: 5 za
+  sekundu, některé endpointy Nákupů míň (`docs/api-notes.md`).
+- Chybová hláška Fénixu teď i v lidském výstupu jmenuje pole a důvod
+  (`budget.dayBudget: Invalid field value`); dřív byl detail jen v `--json`.
+- Když přihlášení k Fénixu selže a odpověď API by obsahovala odeslaný refresh
+  token, appka odpověď do chybového výstupu nepropíše. Pojistka: takovou
+  odpověď jsme neviděli.
+
+### Na co si dát pozor
+
+- **`--dry-run` u `fenix-negative-add` a `fenix-negative-remove` nic neověřuje.**
+  Endpointy vylučujících slov parametr `dryRun` nemají. Přepínač proto jen
+  vypíše požadavek a nic neodešle.
+- **Vylučující slova nemají ve Fénixu ID.** Mažou se textem a typem shody a
+  smazání je trvalé. Volná shoda se jmenuje `negative` (v DRAKu
+  `negativeBroad`; příkazy přijmou obojí).
+- **`--json` u příkazů `fenix-*` vrací částky v haléřích** (syrová odpověď API),
+  kdežto `campaigns --json` a `groups --json` vrací koruny. Přepínače
+  `--day-budget`, `--cpc` a `--cpm` berou koruny v obou rodinách příkazů.
+- Otevřené nejasnosti specifikace (co vrací výpis bez parametru `a`, jednotka
+  `agencyLimit`, význam `maxCpcMultiplier` u kampaní) jsou sepsané v
+  `docs/api-notes.md`.
+- **Otevřené na straně DRAKu:** u sestav, kde Fénix vrací `cpc: 300`, vypsal
+  `groups --json` `maxCpc: null`. Název sloupce odpovídá dokumentaci DRAKu,
+  příčina není známá (`docs/api-notes.md`). Nabídku sestavy zatím čti přes
+  `fenix-groups`.
+
 ## [1.10.1] — 2026-09-07 — oprava jednotek u nákupních kampaní (rozpočet 100× vyšší, obrácené modifikátory)
 
 Verze 1.10.0 se u dvou polí spolehla na OpenAPI specifikaci Fénixu a ta lže.

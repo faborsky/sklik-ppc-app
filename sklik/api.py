@@ -85,8 +85,30 @@ def _session_cache_path() -> str:
 # Auth & Session helpers
 # ---------------------------------------------------------------------------
 
+def _fail_if_secret_reference(token: str, env_var: str) -> None:
+    """Stop with a clear message when a token is an unresolved `op://…` reference.
+
+    Opt-in setup (see README, "Tokeny ve správci hesel"): `.env` may hold
+    1Password secret references instead of tokens, which `./run-op.sh` resolves
+    into the environment before Python starts. Started through plain `./run.sh`
+    the reference itself would be sent to the API as if it were the token —
+    a confusing auth failure, and the vault/item names leave the machine.
+    A real token never starts with `op://`, so plain-token setups never get here.
+    The reference is deliberately not echoed.
+    """
+    if token.startswith("op://"):
+        _fail_msg(
+            f"{env_var} holds an unresolved 1Password reference (op://…), not a "
+            "token. Run the same command through ./run-op.sh instead of ./run.sh "
+            "(it resolves the references via `op run`), or put the plain token "
+            "into .env.",
+            account=ACTIVE_ACCOUNT, envVar=env_var,
+        )
+
+
 def check_config() -> None:
     token = _get_token()
+    _fail_if_secret_reference(token, _token_env_var(ACTIVE_ACCOUNT))
     if not token or token.startswith("your-"):
         env_var = _token_env_var(ACTIVE_ACCOUNT)
         msg = (f"{env_var} not set for account '{ACTIVE_ACCOUNT}'. "

@@ -41,6 +41,17 @@ sed -i '' "s#<SKLIK_APP_DIR>#$APP_DIR#g" ~/.claude/skills/sklik-ppc/SKILL.md   #
 
 > Můžeš to udělat i ručně — otevři `~/.claude/skills/sklik-ppc/SKILL.md` a nahraď všechny výskyty `<SKLIK_APP_DIR>` cestou ke své appce.
 
+#### Volitelně: tokeny v 1Passwordu
+
+Tenhle krok přeskoč, pokud máš tokeny normálně v `.env` — pak se nic nemění. Jestli sis appku nastavil podle sekce „Tokeny ve správci hesel" v hlavním `README.md` (v `.env` jsou odkazy `op://…`), musí skill volat `run-op.sh` místo `run.sh`:
+
+```bash
+sed -i '' "s#/run\.sh#/run-op.sh#g" ~/.claude/skills/sklik-ppc/SKILL.md   # macOS
+# na Linuxu: sed -i "s#/run\.sh#/run-op.sh#g" ~/.claude/skills/sklik-ppc/SKILL.md
+```
+
+Odemčení v 1Passwordu pak potvrzuješ ty a dlouhodobý token neleží v žádném souboru, který by Claude mohl přečíst. Když skill přesto zavolá obyčejné `run.sh`, appka skončí chybou o nevyřešeném odkazu `op://…` a nic neodešle.
+
 ### 3) Ověř
 
 Otevři Claude Code a napiš:

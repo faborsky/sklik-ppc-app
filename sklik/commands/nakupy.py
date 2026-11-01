@@ -99,9 +99,16 @@ def cmd_feed_status(args: argparse.Namespace) -> None:
         print("No feed configured for this shop.")
         return
     for f in feeds:
+        # `id` (spec ≥ 1.27.0) is the feedId of `PATCH /nakupy/feeds/{feedId}`.
+        if f.get("id") is not None:
+            print(f"Feed ID:             {f['id']}")
         print(f"Feed URL:            {f.get('feedUrl', '—')}")
         print(f"Last import (OK):    {f.get('lastSuccessfulImport', '—')}")
-        print(f"Downloads per day:   {f.get('maxFeedDownloadsPerDay', '—')}")
+        # null is a real value here, not "unknown": the spec defines it as
+        # "downloaded as often as possible" (the other values are 1, 4, 16).
+        per_day = f.get("maxFeedDownloadsPerDay", "—")
+        print(f"Downloads per day:   "
+              f"{per_day if per_day is not None else 'unlimited (as often as possible)'}")
 
 
 def cmd_feed_diagnostics(args: argparse.Namespace) -> None:
