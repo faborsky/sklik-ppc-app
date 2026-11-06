@@ -330,7 +330,30 @@ Konverze = pojmenovaná definice cílové akce (nákup, registrace…) a její h
 | `conversion-update` | `--conversion-id`, `--name`, `--value`, `--color`, `--json` |
 | `conversion-remove` | `--conversion-id`, `--confirm`, `--json` |
 
-> **Pozn.:** Účty se zapnutým **SEM** (Seznam Event Measurement) `conversions.*` metody používat nemohou, CLI v takovém případě vypíše srozumitelnou hlášku. Metoda `listConversionTypes` je na straně Sklika nefunkční (HTTP 500), proto `conversion-types` odvozuje typy z existujících konverzí.
+> **Pozn.:** Účty se zapnutým **SEM** (Seznam Event Measurement) `conversions.*` metody používat nemohou, CLI v takovém případě vypíše srozumitelnou hlášku. Metoda `listConversionTypes` je na straně Sklika nefunkční (HTTP 500), proto `conversion-types` odvozuje typy z existujících konverzí. SEM konverze spravují příkazy [`sem-*`](#sem--měření-událostí-api-fénix) níže.
+
+### SEM — měření událostí (API Fénix)
+
+Účty se zapnutým **SEM** (Seznam Event Measurement) nemohou přes DRAK používat konverze (`conversions.*`). Tyhle příkazy proto jdou přes **API Fénix**. Konverze v SEM stojí na události (`Purchase`, `AddToCart`, `InitiateCheckout`, `Lead`…) a může mít podmínky na její rozměry: hodnotu, URL, kategorii, ID produktu… **Založením konverze vznikne i retargetingový seznam**. Tak se dělají publika typu „nákup nad 1 500 Kč“, která běžné URL seznamy z DRAKu neumí.
+
+**Přihlášení:** stejný Fénix refresh token jako u [Nákupů](#nákupy--feed-api-fénix) (`SKLIK_FENIX_REFRESH_TOKEN` / `SKLIK_FENIX_REFRESH_TOKEN_<NAME>`), pro zápis s právem `rw`. `premiseId` nepotřebuje. Spravované účty se otevírají přes `--user-id` stejně jako jinde.
+
+| Příkaz | Klíčové přepínače |
+|--------|-------------------|
+| `sem-status` | `--json`. Je SEM aktivní a od kdy |
+| `sem-conversions` | `--include-deleted`, `--json`. Konverze s událostí a podmínkami |
+| `sem-conversion-create` | `--name`, `--event` (Purchase, AddToCart, InitiateCheckout…), `--value` (Kč, výchozí 0), `--description`, `--condition KLÍČ:TYP:HODNOTA` (opakovatelné), `--conditions-json`, `--dry-run`, `--json` |
+| `sem-conversion-update` | `--conversion-id`, `--name`, `--description`, `--value`, `--condition` (nahradí podmínky), `--conditions-json`, `--dry-run`, `--json` |
+| `sem-conversion-remove` | `--conversion-id`, `--confirm` (nebo `--restore`), `--json` |
+
+`--dry-run` u `sem-conversion-create` a `sem-conversion-update` pošle `dryRun=true`: API požadavek zkontroluje a nic neuloží. Příklad, publikum high-value zákazníků:
+
+```bash
+./run.sh --user-id <ID účtu> sem-conversion-create --name "Nákup nad 1 500 Kč (vedlejší)" \
+  --event Purchase --value 0 --condition value:greater_than:1500 --dry-run
+```
+
+> **Pozor na dvojí počítání:** podmíněná konverze na události, kterou už měří jiná konverze (např. high-value `Purchase` vedle hlavní „Objednávky“), započítá stejnou objednávku v reportu konverzí dvakrát. Proto ji pojmenuj „(vedlejší)“, dej hodnotu 0 a nikdy ji nepoužívej jako cíl automatické strategie. Hodnota v podmínce `value` se zadává v Kč (API ji chce v haléřích, appka převádí). Víc `--condition` jde do jedné skupiny; jestli se v ní kombinují jako A, nebo NEBO, dokumentace API neuvádí, takže u víc podmínek ověř velikost výsledného publika.
 
 ### Retargeting (publika)
 
@@ -524,6 +547,7 @@ Datum se posílá bez času; API ho uloží jako půlnoc místního času (`2026
 
 # Měření a publika
 ./run.sh conversions
+./run.sh sem-conversions                              # SEM účty: konverze přes Fénix
 ./run.sh retargeting
 ./run.sh banner-formats
 
