@@ -36,7 +36,7 @@ COMMAND_PREFIXES = (
     "placement-", "placements-", "targeting-", "budget-", "retargeting-",
     "sitelink-", "sitelinks-", "callout-", "callouts-", "conversion-", "combined-", "suggest-",
     "autotagging-", "search-", "api-", "keyword-",
-    "feed-", "nakupy-", "shop-", "fenix-",
+    "feed-", "nakupy-", "shop-", "fenix-", "sem-",
 )
 
 DOC_FILES = [

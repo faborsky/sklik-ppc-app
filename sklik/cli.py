@@ -40,6 +40,11 @@ from sklik.commands.conversions import (
     cmd_conversions, cmd_conversion_types, cmd_conversion_create,
     cmd_conversion_update, cmd_conversion_remove,
 )
+from sklik.commands.sem import (
+    SEM_EVENTS,
+    cmd_sem_status, cmd_sem_conversions, cmd_sem_conversion_create,
+    cmd_sem_conversion_update, cmd_sem_conversion_remove,
+)
 from sklik.commands.retargeting import (
     cmd_retargeting, cmd_retargeting_create, cmd_retargeting_update, cmd_retargeting_remove,
     cmd_retargeting_attach, cmd_retargeting_detach, cmd_retargeting_attached,
@@ -138,6 +143,7 @@ _GROUPS: list[tuple[str, tuple[str, ...]]] = [
     ("Rozpočty", ("budget",)),
     ("Nákupy / feed (API Fénix)", ("feed-", "nakupy-", "shop-items")),
     ("Kampaně přes API Fénix", ("fenix-",)),
+    ("SEM — měření událostí (API Fénix)", ("sem-",)),
 ]
 
 # Commands served by the Fénix REST API. They authenticate with
@@ -151,6 +157,8 @@ _FENIX_COMMANDS = frozenset({
     "fenix-campaign-create", "fenix-group-create", "fenix-ad-create",
     "fenix-negative-add", "fenix-negative-remove",
     "fenix-campaign-update", "fenix-ad-update",
+    "sem-status", "sem-conversions", "sem-conversion-create",
+    "sem-conversion-update", "sem-conversion-remove",
 })
 
 
@@ -673,6 +681,52 @@ def main() -> None:
     p = subparsers.add_parser("conversion-remove", help="Remove conversion definition")
     p.add_argument("--conversion-id", type=int, required=True, help="Conversion ID")
     p.add_argument("--confirm", action="store_true", help="Required for deletion")
+    p.add_argument("--json", **json_kwargs)
+
+    # --- SEM (API Fénix; needs SKLIK_FENIX_REFRESH_TOKEN[_NAME] in .env) ---
+    p = subparsers.add_parser(
+        "sem-status", help="Is SEM (Seznam Event Measurement) activated? (Fénix)")
+    p.add_argument("--json", **json_kwargs)
+
+    p = subparsers.add_parser(
+        "sem-conversions", help="List SEM conversions with event and conditions (Fénix)")
+    p.add_argument("--include-deleted", action="store_true", help="Also show removed conversions")
+    p.add_argument("--json", **json_kwargs)
+
+    condition_help = ("KEY:TYPE:VALUE, repeatable (all in one group). Keys: url, value (CZK), "
+                      "content_category, content_name, content_type, item_id, event_source, "
+                      "user_region, user_ge, user_ct. Types: contains, equals, starts, ends, their "
+                      "not_ forms, greater_than, less_than. E.g. value:greater_than:1500")
+
+    p = subparsers.add_parser(
+        "sem-conversion-create",
+        help="Create a SEM conversion — also creates a retargeting list from it (Fénix)")
+    p.add_argument("--name", required=True, help='Name, e.g. "Nákup nad 1 500 Kč (vedlejší)"')
+    p.add_argument("--event", required=True, choices=SEM_EVENTS, help="SEM event the conversion counts")
+    p.add_argument("--value", type=int, default=0,
+                   help="Conversion value in CZK (default 0 = secondary conversion)")
+    p.add_argument("--description", help="Optional description")
+    p.add_argument("--condition", action="append", metavar="KEY:TYPE:VALUE", help=condition_help)
+    p.add_argument("--conditions-json", help="Advanced: raw conditionGroups (value key in haléře)")
+    p.add_argument("--dry-run", action="store_true", help="Only validate on the API side, create nothing")
+    p.add_argument("--json", **json_kwargs)
+
+    p = subparsers.add_parser("sem-conversion-update", help="Update a SEM conversion (Fénix)")
+    p.add_argument("--conversion-id", type=int, required=True, help="SEM conversion ID")
+    p.add_argument("--name", help="New name")
+    p.add_argument("--description", help="New description")
+    p.add_argument("--value", type=int, help="New value in CZK")
+    p.add_argument("--condition", action="append", metavar="KEY:TYPE:VALUE",
+                   help="Replace conditions (see sem-conversion-create)")
+    p.add_argument("--conditions-json", help="Advanced: raw conditionGroups (value key in haléře)")
+    p.add_argument("--dry-run", action="store_true", help="Only validate on the API side, change nothing")
+    p.add_argument("--json", **json_kwargs)
+
+    p = subparsers.add_parser(
+        "sem-conversion-remove", help="Remove (or --restore) a SEM conversion (Fénix)")
+    p.add_argument("--conversion-id", type=int, required=True, help="SEM conversion ID")
+    p.add_argument("--restore", action="store_true", help="Restore a removed conversion instead")
+    p.add_argument("--confirm", action="store_true", help="Required for removal")
     p.add_argument("--json", **json_kwargs)
 
     # --- retargeting ---
@@ -1244,6 +1298,11 @@ def main() -> None:
         "conversion-create": cmd_conversion_create,
         "conversion-update": cmd_conversion_update,
         "conversion-remove": cmd_conversion_remove,
+        "sem-status": cmd_sem_status,
+        "sem-conversions": cmd_sem_conversions,
+        "sem-conversion-create": cmd_sem_conversion_create,
+        "sem-conversion-update": cmd_sem_conversion_update,
+        "sem-conversion-remove": cmd_sem_conversion_remove,
         "retargeting": cmd_retargeting,
         "retargeting-create": cmd_retargeting_create,
         "retargeting-update": cmd_retargeting_update,
