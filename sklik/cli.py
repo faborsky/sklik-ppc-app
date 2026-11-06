@@ -41,7 +41,8 @@ from sklik.commands.conversions import (
     cmd_conversion_update, cmd_conversion_remove,
 )
 from sklik.commands.retargeting import (
-    cmd_retargeting, cmd_retargeting_create, cmd_retargeting_update, cmd_retargeting_remove,
+    cmd_retargeting, cmd_retargeting_create, cmd_lookalike_create, cmd_retargeting_update,
+    cmd_retargeting_remove,
     cmd_retargeting_attach, cmd_retargeting_detach, cmd_retargeting_attached,
     cmd_retargeting_exclude, cmd_retargeting_exclude_remove, cmd_retargeting_excluded,
 )
@@ -63,7 +64,7 @@ from sklik.commands.budgets import (
 )
 from sklik.commands.nakupy import (
     cmd_feed_status, cmd_feed_diagnostics, cmd_nakupy_campaigns,
-    cmd_nakupy_stats, cmd_shop_items,
+    cmd_nakupy_stats, cmd_shop_items, cmd_nakupy_item_stats,
 )
 from sklik.commands.fenix_sklik import (
     cmd_fenix_me, cmd_fenix_credit, cmd_fenix_accounts,
@@ -131,7 +132,7 @@ _GROUPS: list[tuple[str, tuple[str, ...]]] = [
     ("Sitelinky", ("sitelink",)),
     ("Popisky", ("callout",)),
     ("Konverze", ("conversion",)),
-    ("Retargeting", ("retargeting",)),
+    ("Retargeting", ("retargeting", "lookalike")),
     ("Bannery (display)", ("banner",)),
     ("Umístění (display)", ("placement",)),
     ("Cílení obsahovky", ("targeting",)),
@@ -145,7 +146,7 @@ _GROUPS: list[tuple[str, tuple[str, ...]]] = [
 # token, so their config is checked against a different variable.
 _FENIX_COMMANDS = frozenset({
     "feed-status", "feed-diagnostics", "nakupy-campaigns",
-    "nakupy-stats", "shop-items",
+    "nakupy-stats", "shop-items", "nakupy-item-stats",
     "fenix-me", "fenix-credit", "fenix-accounts",
     "fenix-campaigns", "fenix-groups", "fenix-ads", "fenix-negatives",
     "fenix-campaign-create", "fenix-group-create", "fenix-ad-create",
@@ -693,6 +694,19 @@ def main() -> None:
                         'type: contains/not_contains/equals/not_equals/starts/not_starts/ends/not_ends')
     p.add_argument("--json", **json_kwargs)
 
+    # --- lookalike-create ---
+    p = subparsers.add_parser(
+        "lookalike-create",
+        help="Create a lookalike retargeting list from a source list (modelling runs only while both "
+             "lists are attached to an active ad group)")
+    p.add_argument("--name", required=True, help="Lookalike list name")
+    p.add_argument("--source-list-id", dest="source_list_id", type=int, required=True,
+                   help="Source retargeting list ID")
+    p.add_argument("--accuracy", choices=["low", "medium", "high"], default="medium",
+                   help="Accuracy vs reach (default medium)")
+    p.add_argument("--description", help="Optional description")
+    p.add_argument("--json", **json_kwargs)
+
     # --- retargeting-update ---
     p = subparsers.add_parser("retargeting-update", help="Update retargeting list")
     p.add_argument("--list-id", type=int, required=True, help="Retargeting list ID")
@@ -1013,6 +1027,20 @@ def main() -> None:
                    help="Also load max-CPC info for Zboží inzeráty (slower)")
     p.add_argument("--json", **json_kwargs)
 
+    p = subparsers.add_parser(
+        "nakupy-item-stats",
+        help="Per-product Seznam Nákupy statistics: cost, conversions, PNO (Fénix)")
+    p.add_argument("--premise-id", **premise_kwargs)
+    p.add_argument("--date-from", help="Start date YYYY-MM-DD (default: 30 days back)")
+    p.add_argument("--date-to", help="End date YYYY-MM-DD (default: today)")
+    p.add_argument("--sort", choices=["cost", "value", "clicks", "conversions", "impressions"],
+                   default="cost", help="Sort rows (default cost)")
+    p.add_argument("--limit", type=int, default=30, help="Rows to show (default 30, 0 = all)")
+    p.add_argument("--only-converting", action="store_true", help="Only items with a conversion")
+    p.add_argument("--no-conversion-cost", type=float, metavar="KC",
+                   help="Only items with zero conversions that cost at least KC — wasted spend")
+    p.add_argument("--json", **json_kwargs)
+
     # --- Sklik campaigns via the Fénix REST API (same token, no premiseId) ---
     dry_run_kwargs: dict = {
         "dest": "dry_run", "action": "store_true",
@@ -1246,6 +1274,7 @@ def main() -> None:
         "conversion-remove": cmd_conversion_remove,
         "retargeting": cmd_retargeting,
         "retargeting-create": cmd_retargeting_create,
+        "lookalike-create": cmd_lookalike_create,
         "retargeting-update": cmd_retargeting_update,
         "retargeting-remove": cmd_retargeting_remove,
         "banner-formats": cmd_banner_formats,
@@ -1300,6 +1329,7 @@ def main() -> None:
         "nakupy-campaigns": cmd_nakupy_campaigns,
         "nakupy-stats": cmd_nakupy_stats,
         "shop-items": cmd_shop_items,
+        "nakupy-item-stats": cmd_nakupy_item_stats,
         "fenix-me": cmd_fenix_me,
         "fenix-credit": cmd_fenix_credit,
         "fenix-accounts": cmd_fenix_accounts,

@@ -34,7 +34,7 @@ ALLOWED_NON_COMMANDS = {
 COMMAND_PREFIXES = (
     "campaign-", "group-", "keyword-", "ad-", "negative-", "banner-",
     "placement-", "placements-", "targeting-", "budget-", "retargeting-",
-    "sitelink-", "sitelinks-", "callout-", "callouts-", "conversion-", "combined-", "suggest-",
+    "sitelink-", "sitelinks-", "callout-", "callouts-", "conversion-", "combined-", "suggest-", "lookalike-",
     "autotagging-", "search-", "api-", "keyword-",
     "feed-", "nakupy-", "shop-", "fenix-",
 )
