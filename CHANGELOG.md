@@ -2,7 +2,36 @@
 
 Verze aplikace je v `sklik/__init__.py` (`__version__`, SemVer). Formát vychází z [Keep a Changelog](https://keepachangelog.com/). Datum je vydání dané verze.
 
-## [1.12.0] — 2026-11-01 — příkazy `fenix-*`, popisky `callout-*`, opravy `negative-remove`, `suggest-stats`, HTTP 429 a skrytí tajných parametrů URL feedu
+## [1.13.0] — 2026-11-06 — SEM konverze přes Fénix (`sem-*`) a kombinace publik (`retargeting-combination*`)
+
+Obojí přispěl grunapavel-dev (PR #10 a #11, nabídka v issue #8).
+
+### Přidáno
+
+- **SEM konverze přes API Fénix** (PR #10): `sem-status`, `sem-conversions`,
+  `sem-conversion-create`, `sem-conversion-update`, `sem-conversion-remove`
+  (`--restore` obnoví). Na účtech se zapnutým SEM jsou DRAKové `conversions.*`
+  zablokované. Každá SEM konverze zároveň založí retargetingový seznam, takže
+  jdou udělat publika podle události a hodnoty (`--condition
+  value:greater_than:1500`, částka v Kč, API ji dostane v haléřích). Create
+  a update mají `--dry-run` s ověřením na straně API, remove chce `--confirm`.
+  Stejný Fénix token jako `fenix-*`, bez `premiseId`. Odpovídá specifikaci
+  Fénixu 1.36.4. Naostro ověřené jen čtení a `--dry-run` (od přispěvatele).
+- **Kombinace publik** (PR #11): `retargeting-combinations` (`--detail` přidá
+  skupiny seznamů a počet uživatelů), `retargeting-combination-create`
+  (`--and` / `--or` / `--not`, každý výskyt je jedna skupina, skupiny se
+  spojují přes AND), `-update` (název, popis, pozastavení), `-remove`,
+  `-attach` / `-detach` k sestavě a `retargeting-combinations-attached`.
+  Mazání a odpojení chtějí `--confirm`. Celý cyklus vytvoření, úpravy,
+  připojení, odpojení a smazání je ověřený naostro.
+
+### Testy
+
+- Offline testy pro `sem-*` a kombinace publik. Test výpisu připojených
+  publik nově podvrhuje velikost stránky, dřív při prvním běhu sahal na
+  `api.limits`.
+
+ — 2026-11-01 — příkazy `fenix-*`, popisky `callout-*`, opravy `negative-remove`, `suggest-stats`, HTTP 429 a skrytí tajných parametrů URL feedu
 
 Vydání spojuje dva příspěvky od Ivety Dudové (PR #2 a #9: příkazy `fenix-*`,
 úpravy kampaní a reklam přes Fénix, PR #5: popisky) s opravami nahlášenými
