@@ -162,7 +162,8 @@ class TestAttachedListingsAreChunked(unittest.TestCase):
     def test_attached_lists_still_work_after_the_refactor(self):
         with mock.patch.object(rt, "_api_call", return_value={"lists": [
                 {"listId": 3, "groupId": 9, "name": "l", "status": "active", "deleted": False},
-                {"listId": 4, "groupId": 9, "deleted": True}]}) as call:
+                {"listId": 4, "groupId": 9, "deleted": True}]}) as call, \
+                mock.patch.object(rt, "_list_page_size", return_value=100):
             out, _ = run(rt.cmd_retargeting_attached, ns(group_id=9))
         self.assertEqual(call.call_args[0][:2], ("retargeting.group.lists.list", [[9]]))
         self.assertEqual([r["listId"] for r in json.loads(out)], [3])
