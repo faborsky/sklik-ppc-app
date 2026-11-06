@@ -62,6 +62,10 @@ pip install -r requirements.txt
 cp .env.example .env   # a doplň token
 ```
 
+### Windows (Git Bash)
+
+`setup.sh` i `run.sh` fungují i v Git Bashi: venv je tam ve složce `venv/Scripts`, skripty to poznají samy. `run.sh` navíc přepne Python na UTF-8, jinak by česká diakritika a `--json` v konzoli Windows vycházely rozbité. Soubor `.gitattributes` drží shellové skripty s koncem řádků LF, aby je `core.autocrlf=true` při klonování nepřevedl na CRLF (Git Bash by na nich selhal).
+
 ## Autentizace
 
 ### Získání API tokenu
@@ -338,6 +342,7 @@ Konverze = pojmenovaná definice cílové akce (nákup, registrace…) a její h
 |--------|-------------------|
 | `retargeting` | `--json` |
 | `retargeting-create` | `--name`, `--membership` (dny), `--description`, `--use-historic`, `--take-all-users`, `--conditions-json` (tvar: `[{"conditions":[{"type":"contains","value":"/dekujeme"}]}]`), `--json` |
+| `lookalike-create` | `--name`, `--source-list-id`, `--accuracy` (low/medium/high, výchozí medium), `--description`, `--json`. Modelování běží, jen když je zdrojový i lookalike seznam napojený na aktivní sestavu |
 | `retargeting-update` | `--list-id`, `--name`, `--membership`, `--description`, `--json` |
 | `retargeting-remove` | `--list-id`, `--confirm`, `--json` |
 | `retargeting-attach` | `--list-id`, `--group-id`, `--json`. Napojí publikum na sestavu jako cílení |
@@ -432,6 +437,7 @@ Seznam Nákupy (dřív Zboží.cz): feed, diagnostika položek, modifikátory na
 | `nakupy-campaigns` | `--premise-id`, `--json`. Nákupní kampaně + modifikátory nabídek (web / zařízení / typ aukce) |
 | `nakupy-stats` | `--date-from`, `--date-to`, `--split "webType,deviceType,productType,conversionId"`, `--by-category`, `--granularity`, `--premise-id`, `--json` |
 | `shop-items` | `--premise-id`, `--all`, `--limit`, `--unpaired`/`--paired`, `--item-id "A,B"`, `--product-detail` (pozice v aukci + potřebná CPC), `--search-info`, `--json` |
+| `nakupy-item-stats` | `--date-from`, `--date-to` (výchozí 30 dní), `--sort` (cost/value/clicks/conversions/impressions), `--limit` (výchozí 30, 0 = vše), `--only-converting`, `--no-conversion-cost KČ` (položky bez konverze s náklady aspoň KČ), `--premise-id`, `--json`. Výkon po jednotlivých produktech: co utrácí bez konverze |
 
 **Dvě konvence se tu liší od zbytku appky:**
 
@@ -515,6 +521,7 @@ Datum se posílá bez času; API ho uloží jako půlnoc místního času (`2026
 ./run.sh feed-diagnostics
 ./run.sh nakupy-stats --split webType,deviceType --date-from 2026-08-01 --date-to 2026-08-31
 ./run.sh shop-items --unpaired --all --json
+./run.sh nakupy-item-stats --no-conversion-cost 50   # produkty, které utratily aspoň 50 Kč bez konverze
 
 # Kampaně přes API Fénix — ověřit požadavek bez zápisu, pak založit (pozastavenou)
 ./run.sh fenix-me

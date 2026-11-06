@@ -1,0 +1,3 @@
+# Shell scripts must keep LF line endings: with core.autocrlf=true a Windows
+# checkout would turn them into CRLF and Git Bash then fails on the carriage returns.
+*.sh text eol=lf

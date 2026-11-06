@@ -6,7 +6,7 @@ Python CLI for managing PPC search & display campaigns on Seznam Sklik via the D
 
 ```bash
 source venv/bin/activate && python sklik_cli.py <command> [flags]
-# or: ./run.sh <command> [flags]
+# or: ./run.sh <command> [flags]   (also on Windows/Git Bash: it picks venv/bin or venv/Scripts)
 # opt-in, only when .env holds 1Password op:// references instead of tokens:
 #     ./run-op.sh <command> [flags]     (= op run --env-file=.env -- ./run.sh …)
 ```
@@ -42,7 +42,7 @@ CLI accepts/displays **CZK**; the API uses haléře (100 = 1 Kč). Conversion is
 
 **`fenix-*` commands**: flags take CZK like everywhere else (`--day-budget`, `--cpc`, `--cpm`) and the human output prints Kč, but **`--json` is the raw API payload — `budget.dayBudget`, `exhaustedDayBudget`, `cpc`, `cpm` are haléře there**, unlike `campaigns --json` / `groups --json`, which convert to CZK. `fenix-credit` is plain CZK (`credit`, `creditWithVat`); its `agencyLimit` has no unit in the spec and is passed through unlabelled. Verified against a live account on 2026-10-02: `budget.dayBudget` and `cpc` are haléře, `credit` is CZK; `exhaustedDayBudget`, `cpm` and `agencyLimit` are still the spec's word only.
 
-## Commands (112, grouped)
+## Commands (114, grouped)
 
 **Full flag reference + examples: [README.md](README.md).** Index:
 
@@ -56,12 +56,13 @@ CLI accepts/displays **CZK**; the API uses haléře (100 = 1 Kč). Conversion is
 - **Sitelinks:** `sitelinks`, `sitelink-create/update/remove`, `sitelink-assign` (campaign/group; replaces the sitelinks, re-sends the assigned callouts — one shared set in the API), `sitelinks-assigned`
 - **Callouts (popisky):** `callouts`, `callout-create/remove`, `callout-assign` (replaces the callouts, keeps the sitelinks; `--dry-run`), `callouts-assigned`. A callout is a `sitelinks.*` record without a URL; the CLI keeps the two apart.
 - **Conversions:** `conversions`, `conversion-types`, `conversion-create/update/remove`
+- **Lookalike audiences:** `lookalike-create` (`--source-list-id`, `--accuracy low|medium|high`) — modelling only runs while the source and the lookalike list are both attached to an active group
 - **Retargeting:** `retargeting`, `retargeting-create/update/remove`, **`retargeting-attach/detach`** (audience ↔ group), `retargeting-attached`, **`retargeting-exclude`** (+`-remove`) — negative retargeting at campaign OR group level, `retargeting-excluded`
 - **Banners:** `banner-formats`, `banners`, `banner-create`, `banner-download`, `banner-update`, `banner-remove`, `banner-restore`
 - **Placements:** `placements`, `placement-create/remove`, `placements-excluded`, `placement-exclude` (+`-remove`/`-restore`) — negative placements
 - **Display targeting:** `targeting-categories`, `targeting`, `targeting-add`, `targeting-exclude`, `targeting-remove`, `targeting-restore` — unified `--type interest/theme/intend`
 - **Shared budgets:** `budgets`, `budget-create/update/remove` — campaign assignment lives on the budget; amounts in plain CZK
-- **Nákupy / feed (Fénix API, separate token):** `feed-status`, `feed-diagnostics` (offer health), `nakupy-campaigns` (web/device/auction-type **bid multipliers**, unreadable via DRAK), `nakupy-stats` (`--split webType,deviceType,productType,conversionId` or `--by-category`; async report), `shop-items` (`--all`, `--unpaired`, `--product-detail` = auction position + CPC-to-win)
+- **Nákupy / feed (Fénix API, separate token):** `feed-status`, `feed-diagnostics` (offer health), `nakupy-campaigns` (web/device/auction-type **bid multipliers**, unreadable via DRAK), `nakupy-stats` (`--split webType,deviceType,productType,conversionId` or `--by-category`; async report), `shop-items` (`--all`, `--unpaired`, `--product-detail` = auction position + CPC-to-win), `nakupy-item-stats` (per-product cost/conversions/PNO, `--no-conversion-cost`)
 - **Campaigns via Fénix (same Fénix token, no premiseId; DRAK stays the default for everything it can do):** `fenix-me` (who the token acts as + scopes), `fenix-credit`, `fenix-accounts` (IDs for `--user-id`), `fenix-campaigns`, `fenix-groups --campaign-id`, `fenix-ads --campaign-id --group-id`, **`fenix-negatives --campaign-id [--group-id]`** (lists CAMPAIGN-level negatives — DRAK cannot), `fenix-campaign-create` (created **paused** unless `--status active`), `fenix-group-create`, `fenix-ad-create` (ETA) — all three with `--dry-run` = API `dryRun=true` — and `fenix-negative-add` / `fenix-negative-remove` (by text + match type, `--confirm`; their `--dry-run` is a local preview only); **`fenix-campaign-update`** (status, day/total budget, start/end date, campaign-level `capping`, `excludedUrls`) and **`fenix-ad-update`** (status, start/end date, banner/branding name; any ad type incl. banners, several `--ad-id` of one group) — PATCH with `--dry-run` = API `dryRun=true`. The PATCH body needs the entity's `type`: looked up unless `--type` is given (campaign lookup sends `ids`, not the spec's `id` — the live API validates `ids`)
 
 ## Safety

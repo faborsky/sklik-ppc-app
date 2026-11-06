@@ -84,6 +84,29 @@ def cmd_retargeting_create(args: argparse.Namespace) -> None:
         print(f"Retargeting list created: ID {ids[0] if ids else '?'}")
 
 
+def cmd_lookalike_create(args: argparse.Namespace) -> None:
+    """Create a lookalike retargeting list (retargeting.lookalikes.create).
+
+    The source list must be of a supported type; Sklik models the audience only while
+    both the lookalike and the source list are attached to an active ad group."""
+    item: dict = {
+        "name": args.name,
+        "accuracy": args.accuracy,
+        "sourceRetargetingList": {"id": args.source_list_id},
+    }
+    if args.description:
+        item["description"] = args.description
+
+    data = _api_call("retargeting.lookalikes.create", [[item]], getattr(args, "user_id", None))
+    ids = data.get("listIds", [])
+
+    if args.json:
+        _output_json({"listIds": ids})
+    else:
+        print(f"Lookalike list created: ID {ids[0] if ids else '?'} (source {args.source_list_id}, "
+              f"accuracy {args.accuracy})")
+
+
 def cmd_retargeting_update(args: argparse.Namespace) -> None:
     """Update a retargeting list (name / membership / description)."""
     attributes: dict = {}

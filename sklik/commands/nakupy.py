@@ -347,3 +347,68 @@ def cmd_shop_items(args: argparse.Namespace) -> None:
     if not args.all and total is not None and total > len(items):
         print(f"NOTE: showing {len(items)} of {total} items — add --all to page "
               "through the whole feed.", file=sys.stderr)
+
+
+# ---------------------------------------------------------------------------
+# Per-product statistics
+# ---------------------------------------------------------------------------
+
+_ITEM_SORT_KEYS = {"cost": "totalMoney", "value": "conversionValue", "clicks": "clicks",
+                   "conversions": "conversions", "impressions": "impressions"}
+
+
+def cmd_nakupy_item_stats(args: argparse.Namespace) -> None:
+    """Per-product statistics: which items cost money without converting."""
+    premise = fenix.resolve_premise(args.premise_id)
+    date_to = args.date_to or datetime.now().strftime("%Y-%m-%d")
+    date_from = args.date_from or (datetime.strptime(date_to, "%Y-%m-%d")
+                                   - timedelta(days=29)).strftime("%Y-%m-%d")
+
+    def _local(day: str, hms: str) -> str:
+        # Local offset for that day (CET/CEST) from the OS clock, so the range follows DST.
+        return datetime.strptime(f"{day} {hms}", "%Y-%m-%d %H:%M:%S").astimezone().isoformat()
+
+    created = fenix.call("POST", "/nakupy/statistics/item", {"premiseId": premise}, body={
+        "from": _local(date_from, "00:00:00"), "to": _local(date_to, "23:59:59"),
+        "format": ["json"]})
+    report_id = created.get("id")
+    if report_id is None:
+        _fail_msg("Fénix accepted the statistics request but returned no report id.",
+                  detail=created)
+    stats = fenix.poll_report(report_id).get("stats") or []
+
+    items = [r for r in stats if r.get("itemId")]
+    unassigned = next((r for r in stats if not r.get("itemId")), None)
+    rows = items
+    if args.only_converting:
+        rows = [r for r in rows if r.get("conversions")]
+    if args.no_conversion_cost is not None:
+        rows = [r for r in rows if not r.get("conversions")
+                and (r.get("totalMoney") or 0) >= args.no_conversion_cost]
+    rows = sorted(rows, key=lambda r: -(r.get(_ITEM_SORT_KEYS[args.sort]) or 0))
+
+    total_cost = sum(r.get("totalMoney") or 0 for r in stats)
+    total_value = sum(r.get("conversionValue") or 0 for r in stats)
+    summary = {"premiseId": premise, "dateFrom": date_from, "dateTo": date_to,
+               "items": len(items), "totalCost": round(total_cost, 2),
+               "totalConversionValue": round(total_value, 2),
+               "pno": round(total_cost / total_value, 4) if total_value else None,
+               "unassignedCost": round((unassigned or {}).get("totalMoney") or 0, 2)}
+
+    shown = rows[:args.limit] if args.limit else rows
+    if args.json:
+        _output_json({"summary": summary, "rows": shown})
+        return
+    pno = f"{summary['pno'] * 100:.1f} %" if summary["pno"] is not None else "—"
+    print(f"Seznam Nákupy — shop {premise}, {date_from} → {date_to}: {summary['items']} items, "
+          f"cost {_czk(summary['totalCost'])}, value {_czk(summary['totalConversionValue'])}, "
+          f"PNO {pno}")
+    print(f"\n{'Item':<52} {'Clicks':>6} {'Cost':>12} {'Conv':>5} {'Value':>12} {'PNO':>7}")
+    print("-" * 100)
+    for r in shown:
+        rp = f"{r['pno'] * 100:.1f} %" if r.get("pno") is not None else "—"
+        print(f"{(r.get('feedItem') or r.get('itemId') or '')[:51]:<52} {r.get('clicks', 0):>6} "
+              f"{_czk(r.get('totalMoney')):>12} {r.get('conversions', 0):>5} "
+              f"{_czk(r.get('conversionValue')):>12} {rp:>7}")
+    if args.limit and len(rows) > args.limit:
+        print(f"… {len(rows) - args.limit} more (raise --limit or use --json)")
