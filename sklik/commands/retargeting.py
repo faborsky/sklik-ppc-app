@@ -122,6 +122,187 @@ def cmd_retargeting_remove(args: argparse.Namespace) -> None:
 
 
 # ---------------------------------------------------------------------------
+# Commands — E-mail audiences (retargeting.emails.* / retargeting.email.*)
+# ---------------------------------------------------------------------------
+# An e-mail list is created empty, then filled with addresses. Unlike URL lists:
+#   - create/update take flat items ({name, description} / {retargetingListId, …}),
+#     not the {attributes: …} wrapper;
+#   - addEmail / removeEmail / removeAll take ONE struct {retargetingListId, emails, …},
+#     not an array of items;
+#   - the account must have accepted the e-mail retargeting terms in the web UI,
+#     otherwise writes fail with email_retargeting_terms_and_conditions_not_granted
+#     (check with retargeting.email.contractCondition.check).
+# The API docs neither say whether addresses must be hashed nor give a per-call cap,
+# so addresses are sent normalised (trimmed, lower-cased, de-duplicated) in chunks.
+# Addresses are personal data: they are never echoed back, only counted.
+
+_EMAIL_CHUNK = 1000
+
+
+def _read_emails(args: argparse.Namespace) -> tuple[list[str], int]:
+    """Addresses from --emails and/or --file (one per line; for CSV the first column).
+    Returns (valid unique normalised addresses, number of rejected entries)."""
+    raw: list[str] = []
+    if args.emails:
+        raw.extend(args.emails.split(","))
+    if args.file:
+        try:
+            with open(args.file, encoding="utf-8-sig") as fh:
+                for line in fh:
+                    raw.append(line.replace(";", ",").split(",")[0])
+        except OSError as e:
+            _fail_msg(f"Cannot read --file: {e}")
+    if not raw:
+        _fail_msg("Give addresses with --emails a@b.cz,c@d.cz and/or --file path.")
+
+    seen: set[str] = set()
+    valid: list[str] = []
+    rejected = 0
+    for item in raw:
+        addr = item.strip().strip('"').lower()
+        if not addr:
+            continue
+        if "@" not in addr or "." not in addr.split("@")[-1] or " " in addr:
+            rejected += 1  # header row, stray values, typos
+            continue
+        if addr not in seen:
+            seen.add(addr)
+            valid.append(addr)
+    if not valid:
+        _fail_msg(f"No valid e-mail addresses found ({rejected} rejected).")
+    return valid, rejected
+
+
+def _email_terms_accepted(uid: int | None) -> bool | None:
+    data = _api_call("retargeting.email.contractCondition.check", [], uid)
+    return data.get("contractAccepted")
+
+
+def _require_email_terms(uid: int | None) -> None:
+    if _email_terms_accepted(uid) is False:
+        _fail_msg("E-mail retargeting terms are not accepted on this account. Accept them in the "
+                  "Sklik web UI (Nástroje → Retargeting → e-mailové seznamy) and retry.")
+
+
+def cmd_retargeting_email_terms(args: argparse.Namespace) -> None:
+    """Has the account accepted the e-mail retargeting terms?"""
+    accepted = _email_terms_accepted(getattr(args, "user_id", None))
+    if args.json:
+        _output_json({"contractAccepted": accepted})
+    else:
+        print("E-mail retargeting terms: " + ("accepted" if accepted else "NOT accepted — accept them "
+                                              "in the Sklik web UI before creating e-mail lists"))
+
+
+def cmd_retargeting_emails(args: argparse.Namespace) -> None:
+    """List e-mail audiences; --detail adds membership and user counts."""
+    uid = getattr(args, "user_id", None)
+    data = _api_call("retargeting.emails.list", [], uid)
+    lists = [e for e in data.get("emails", []) if args.include_deleted or not e.get("deleted")]
+    rows = [{"listId": e.get("emailId"), "name": e.get("name"),
+             "status": e.get("status"), "deleted": e.get("deleted")} for e in lists]
+
+    if args.detail and rows:
+        got = _api_call("retargeting.emails.get", [[r["listId"] for r in rows]], uid)
+        by_id = {e.get("emailId"): (e.get("attributes") or {}) for e in got.get("emails", [])}
+        for r in rows:
+            a = by_id.get(r["listId"], {})
+            r["users"] = a.get("users")
+            r["membership"] = a.get("membership")
+
+    if args.json:
+        _output_json(rows)
+        return
+    if not rows:
+        print("No e-mail audiences found.")
+        return
+    print(f"{'List ID':<12} {'Name':<40} {'Status':<8}" + (f" {'Users':>9} {'Days':>5}" if args.detail else ""))
+    print("-" * (62 + (16 if args.detail else 0)))
+    for r in rows:
+        line = f"{r['listId'] or '':<12} {(r['name'] or ''):<40} {(r['status'] or ''):<8}"
+        if args.detail:
+            line += f" {r.get('users') if r.get('users') is not None else '?':>9} {r.get('membership') or '':>5}"
+        print(line)
+
+
+def cmd_retargeting_email_create(args: argparse.Namespace) -> None:
+    """Create an empty e-mail audience (fill it with retargeting-email-add)."""
+    uid = getattr(args, "user_id", None)
+    _require_email_terms(uid)
+    item: dict = {"name": args.name}
+    if args.description:
+        item["description"] = args.description
+    data = _api_call("retargeting.emails.create", [[item]], uid)
+    ids = data.get("listIds", [])
+    if args.json:
+        _output_json({"listIds": ids})
+    else:
+        print(f"E-mail audience created: ID {ids[0] if ids else '?'} — add addresses with retargeting-email-add")
+
+
+def cmd_retargeting_email_update(args: argparse.Namespace) -> None:
+    """Rename / re-describe / pause / resume an e-mail audience."""
+    item: dict = {"retargetingListId": args.list_id}
+    if args.name:
+        item["name"] = args.name
+    if args.description is not None:
+        item["description"] = args.description
+    if args.status:
+        item["status"] = args.status
+    if len(item) == 1:
+        _fail_msg("No fields to update. Use --name, --description or --status.")
+    _api_call("retargeting.emails.update", [[item]], getattr(args, "user_id", None))
+    if args.json:
+        _output_json({"updated": True, "listId": args.list_id})
+    else:
+        print(f"E-mail audience {args.list_id} updated.")
+
+
+def _send_emails(method: str, args: argparse.Namespace) -> tuple[int, int]:
+    uid = getattr(args, "user_id", None)
+    _require_email_terms(uid)
+    emails, rejected = _read_emails(args)
+    for i in range(0, len(emails), _EMAIL_CHUNK):
+        _api_call(method, [{"retargetingListId": args.list_id,
+                            "emails": emails[i:i + _EMAIL_CHUNK]}], uid)
+    return len(emails), rejected
+
+
+def cmd_retargeting_email_add(args: argparse.Namespace) -> None:
+    """Add addresses to an e-mail audience."""
+    sent, rejected = _send_emails("retargeting.emails.addEmail", args)
+    if args.json:
+        _output_json({"listId": args.list_id, "sent": sent, "rejected": rejected})
+    else:
+        print(f"Sent {sent} unique addresses to e-mail audience {args.list_id}"
+              + (f" ({rejected} invalid entries skipped)" if rejected else "")
+              + ". Sklik matches them to users in the background; the user count updates later.")
+
+
+def cmd_retargeting_email_remove_emails(args: argparse.Namespace) -> None:
+    """Remove specific addresses from an e-mail audience."""
+    if not args.confirm:
+        _fail_msg("Requires --confirm flag.")
+    sent, rejected = _send_emails("retargeting.emails.removeEmail", args)
+    if args.json:
+        _output_json({"listId": args.list_id, "removed": sent, "rejected": rejected})
+    else:
+        print(f"Requested removal of {sent} addresses from e-mail audience {args.list_id}.")
+
+
+def cmd_retargeting_email_clear(args: argparse.Namespace) -> None:
+    """Remove ALL addresses from an e-mail audience (the list itself stays)."""
+    if not args.confirm:
+        _fail_msg("Requires --confirm flag.")
+    _api_call("retargeting.emails.removeAll", [{"retargetingListId": args.list_id}],
+              getattr(args, "user_id", None))
+    if args.json:
+        _output_json({"cleared": True, "listId": args.list_id})
+    else:
+        print(f"All addresses removed from e-mail audience {args.list_id}.")
+
+
+# ---------------------------------------------------------------------------
 # Commands — Attaching audiences to ad groups (retargeting.group.lists.*)
 # ---------------------------------------------------------------------------
 # The attachment lives in its own namespace, not on the group object:

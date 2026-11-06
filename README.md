@@ -350,6 +350,22 @@ Konverze = pojmenovaná definice cílové akce (nákup, registrace…) a její h
 > Publikum jde napojit jen na sestavy **obsahových** kampaní. Pokus o napojení **smazaného** seznamu vrací `406 Bad values` bez bližší diagnostiky, zkontroluj `deleted` ve výpisu `retargeting --json`.
 > **Vyloučení publika** (`retargeting-exclude`) funguje na úrovni kampaně i sestavy, typicky „vyluč stávající zákazníky z akviziční kampaně“. Na rozdíl od napojení funguje i na search kampaních.
 
+#### E-mailová publika
+
+Seznamy zákaznických e-mailů, např. high-value zákazníci vyexportovaní z e-shopu. Seznam se založí prázdný a pak se plní adresami.
+
+| Příkaz | Klíčové přepínače |
+|--------|-------------------|
+| `retargeting-email-terms` | `--json`. Zda účet přijal podmínky e-mailového retargetingu |
+| `retargeting-emails` | `--detail` (počet uživatelů, délka členství), `--include-deleted`, `--json` |
+| `retargeting-email-create` | `--name` (unikátní, bez „drtg“), `--description`, `--json` |
+| `retargeting-email-update` | `--list-id`, `--name`, `--description`, `--status` (active/suspend), `--json` |
+| `retargeting-email-add` | `--list-id`, `--emails a@b.cz,c@d.cz` a/nebo `--file` (adresa na řádek, u CSV první sloupec), `--json` |
+| `retargeting-email-remove-emails` | `--list-id`, `--emails` / `--file`, `--confirm`, `--json` |
+| `retargeting-email-clear` | `--list-id`, `--confirm`, `--json`. Odebere všechny adresy, seznam zůstane |
+
+> Bez přijatých podmínek e-mailového retargetingu (ve webovém rozhraní Skliku) zápisy selžou, CLI to kontroluje předem. Adresy se před odesláním ořežou, převedou na malá písmena a deduplikují, posílají se po 1 000. Dokumentace API neuvádí, zda mají být hashované, ani limit na jedno volání. CLI adresy nikdy nevypisuje, jen počty (nevalidní položky, třeba hlavičku CSV, přeskočí a spočítá). **GDPR:** použití zákaznických e-mailů v reklamě musí krýt souhlas nebo oprávněný zájem v podmínkách e-shopu.
+
 ### Obrázkové bannery
 
 Statické bannery (jpg/png/gif) pro obsahovou síť. Pro HTML5 bannery použij jiný nástroj, tady jde o statické formáty.
@@ -525,6 +541,7 @@ Datum se posílá bez času; API ho uloží jako půlnoc místního času (`2026
 # Měření a publika
 ./run.sh conversions
 ./run.sh retargeting
+./run.sh retargeting-email-terms                      # e-mailová publika: přijal účet podmínky?
 ./run.sh banner-formats
 
 # Kombinovaná (nativní) reklama pro obsahovou síť

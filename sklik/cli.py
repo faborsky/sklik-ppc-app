@@ -44,6 +44,9 @@ from sklik.commands.retargeting import (
     cmd_retargeting, cmd_retargeting_create, cmd_retargeting_update, cmd_retargeting_remove,
     cmd_retargeting_attach, cmd_retargeting_detach, cmd_retargeting_attached,
     cmd_retargeting_exclude, cmd_retargeting_exclude_remove, cmd_retargeting_excluded,
+    cmd_retargeting_emails, cmd_retargeting_email_create, cmd_retargeting_email_update,
+    cmd_retargeting_email_add, cmd_retargeting_email_remove_emails, cmd_retargeting_email_clear,
+    cmd_retargeting_email_terms,
 )
 from sklik.commands.banners import (
     cmd_banner_formats, cmd_banners, cmd_banner_create, cmd_banner_download, cmd_banner_remove,
@@ -707,6 +710,54 @@ def main() -> None:
     p.add_argument("--confirm", action="store_true", help="Required for deletion")
     p.add_argument("--json", **json_kwargs)
 
+    # --- retargeting e-mail audiences ---
+    p = subparsers.add_parser(
+        "retargeting-emails", help="List e-mail audiences (customer e-mail lists)")
+    p.add_argument("--detail", action="store_true", help="Add user counts and membership")
+    p.add_argument("--include-deleted", action="store_true", help="Also show removed lists")
+    p.add_argument("--json", **json_kwargs)
+
+    p = subparsers.add_parser(
+        "retargeting-email-create",
+        help="Create an empty e-mail audience (needs e-mail retargeting terms accepted)")
+    p.add_argument("--name", required=True, help="List name (unique, must not contain 'drtg')")
+    p.add_argument("--description", help="Optional description")
+    p.add_argument("--json", **json_kwargs)
+
+    p = subparsers.add_parser(
+        "retargeting-email-update", help="Rename / re-describe / pause / resume an e-mail audience")
+    p.add_argument("--list-id", type=int, required=True, help="E-mail audience ID")
+    p.add_argument("--name", help="New name")
+    p.add_argument("--description", help="New description")
+    p.add_argument("--status", choices=["active", "suspend"], help="Activate or pause")
+    p.add_argument("--json", **json_kwargs)
+
+    p = subparsers.add_parser(
+        "retargeting-email-add",
+        help="Add addresses to an e-mail audience (normalised, de-duplicated, sent in batches of 1000)")
+    p.add_argument("--list-id", type=int, required=True, help="E-mail audience ID")
+    p.add_argument("--emails", help="Comma-separated addresses")
+    p.add_argument("--file", help="File with one address per line (CSV: first column)")
+    p.add_argument("--json", **json_kwargs)
+
+    p = subparsers.add_parser(
+        "retargeting-email-remove-emails", help="Remove specific addresses from an e-mail audience")
+    p.add_argument("--list-id", type=int, required=True, help="E-mail audience ID")
+    p.add_argument("--emails", help="Comma-separated addresses")
+    p.add_argument("--file", help="File with one address per line (CSV: first column)")
+    p.add_argument("--confirm", action="store_true", help="Required for removal")
+    p.add_argument("--json", **json_kwargs)
+
+    p = subparsers.add_parser(
+        "retargeting-email-clear", help="Remove ALL addresses from an e-mail audience (list stays)")
+    p.add_argument("--list-id", type=int, required=True, help="E-mail audience ID")
+    p.add_argument("--confirm", action="store_true", help="Required for removal")
+    p.add_argument("--json", **json_kwargs)
+
+    p = subparsers.add_parser(
+        "retargeting-email-terms", help="Check whether e-mail retargeting terms are accepted")
+    p.add_argument("--json", **json_kwargs)
+
     # --- retargeting-attach ---
     p = subparsers.add_parser(
         "retargeting-attach", help="Attach an audience list to an ad group as targeting")
@@ -1248,6 +1299,13 @@ def main() -> None:
         "retargeting-create": cmd_retargeting_create,
         "retargeting-update": cmd_retargeting_update,
         "retargeting-remove": cmd_retargeting_remove,
+        "retargeting-emails": cmd_retargeting_emails,
+        "retargeting-email-create": cmd_retargeting_email_create,
+        "retargeting-email-update": cmd_retargeting_email_update,
+        "retargeting-email-add": cmd_retargeting_email_add,
+        "retargeting-email-remove-emails": cmd_retargeting_email_remove_emails,
+        "retargeting-email-clear": cmd_retargeting_email_clear,
+        "retargeting-email-terms": cmd_retargeting_email_terms,
         "banner-formats": cmd_banner_formats,
         "banners": cmd_banners,
         "banner-create": cmd_banner_create,
