@@ -261,22 +261,29 @@ def cmd_retargeting_excluded(args: argparse.Namespace) -> None:
                   f"{r['level']:<10} {r['parentName'] or ''}")
 
 
+def _group_ids(group_id: int | None, uid: int | None) -> list[int]:
+    """[group_id] if given, otherwise every non-deleted group of the account."""
+    if group_id:
+        return [group_id]
+    return [g["id"] for g in _fetch_all("groups.list", {"isDeleted": False},
+                                        ["id"], "groups", uid)]
+
+
+def _list_by_groups(method: str, key: str, gids: list[int], uid: int | None) -> list[dict]:
+    """Call a `retargeting.group.*.list` method in chunks (one big array hits 413)."""
+    chunk = _list_page_size(uid)
+    rows: list[dict] = []
+    for i in range(0, len(gids), chunk):
+        data = _api_call(method, [gids[i:i + chunk]], uid)
+        rows.extend(r for r in data.get(key, []) if not r.get("deleted"))
+    return rows
+
+
 def cmd_retargeting_attached(args: argparse.Namespace) -> None:
     """List audience lists attached to a group (or to all groups)."""
     uid = getattr(args, "user_id", None)
-    if args.group_id:
-        gids = [args.group_id]
-    else:
-        gids = [g["id"] for g in _fetch_all("groups.list", {"isDeleted": False},
-                                            ["id"], "groups", uid)]
-
-    # The method takes the group IDs as one array — on a big account that array
-    # would blow the per-call item cap (413), so ask in chunks.
-    chunk = _list_page_size(uid)
-    rows = []
-    for i in range(0, len(gids), chunk):
-        data = _api_call("retargeting.group.lists.list", [gids[i:i + chunk]], uid)
-        rows.extend(r for r in data.get("lists", []) if not r.get("deleted"))
+    rows = _list_by_groups("retargeting.group.lists.list", "lists",
+                           _group_ids(args.group_id, uid), uid)
 
     if args.json:
         _output_json([{
@@ -294,3 +301,191 @@ def cmd_retargeting_attached(args: argparse.Namespace) -> None:
         for r in rows:
             print(f"{r.get('listId', ''):<12} {r.get('groupId', ''):<12} "
                   f"{r.get('name', ''):<40} {r.get('status', '')}")
+
+
+# ---------------------------------------------------------------------------
+# Commands — Combinations (retargeting.combinations.* / retargeting.group.combinations.*)
+# ---------------------------------------------------------------------------
+# A combination joins existing lists with set logic: each `listGroup` has an
+# operator (and = in every list of the group, or = in at least one, not = in none)
+# and the groups are ANDed together. A combination made only of `not` groups is
+# rejected (retargeting_combination_list_groups_only_not). Combinations are NOT
+# returned by retargeting.lists.list — they live in their own namespace — and
+# they attach to groups via retargeting.group.combinations.*. Excluding one works
+# through the existing negative retargeting (entityId = combination ID).
+
+_COMBINATION_OPERATORS = ("and", "or", "not")
+
+
+def _parse_id_csv(value: str, flag: str) -> list[int]:
+    try:
+        ids = [int(x.strip()) for x in value.split(",") if x.strip()]
+    except ValueError:
+        _fail_msg(f"{flag} must be comma-separated list IDs, got '{value}'.")
+    if not ids:
+        _fail_msg(f"{flag} is empty.")
+    return ids
+
+
+def _combination_groups(args: argparse.Namespace) -> list[dict]:
+    """listGroups from --and/--or/--not (each occurrence = one group) or --groups-json."""
+    groups: list[dict] = []
+    for op in _COMBINATION_OPERATORS:
+        for value in getattr(args, f"op_{op}") or []:
+            groups.append({"operator": op, "listIds": _parse_id_csv(value, f"--{op}")})
+    if args.groups_json:
+        if groups:
+            _fail_msg("Use either --and/--or/--not or --groups-json, not both.")
+        try:
+            groups = json.loads(args.groups_json)
+        except json.JSONDecodeError as e:
+            _fail_msg(f"Invalid --groups-json: {e}")
+        for g in groups:
+            if g.get("operator") not in _COMBINATION_OPERATORS:
+                _fail_msg(f"Each group needs operator and/or/not, got {g.get('operator')!r}.")
+    if not groups:
+        _fail_msg("Give at least one list group: --or 1,2 / --and 3 / --not 4 (or --groups-json).")
+    if all(g["operator"] == "not" for g in groups):
+        _fail_msg("A combination of only --not groups is rejected by Sklik; add an --and/--or group.")
+    return groups
+
+
+def cmd_retargeting_combinations(args: argparse.Namespace) -> None:
+    """List retargeting combinations; --detail adds list groups and user counts."""
+    uid = getattr(args, "user_id", None)
+    data = _api_call("retargeting.combinations.list", [], uid)
+    combos = [c for c in data.get("combinations", []) if args.include_deleted or not c.get("deleted")]
+
+    rows = [{
+        "combinationId": c.get("combinationId"),
+        "name": c.get("name"),
+        "status": c.get("status"),
+        "deleted": c.get("deleted"),
+    } for c in combos]
+
+    if args.detail and rows:
+        details: dict = {}
+        ids = [r["combinationId"] for r in rows]
+        for i in range(0, len(ids), 100):
+            got = _api_call("retargeting.combinations.get", [ids[i:i + 100]], uid)
+            for c in got.get("combinations", []):
+                details[c.get("combinationId")] = c
+        for r in rows:
+            d = details.get(r["combinationId"], {})
+            r["users"] = (d.get("attributes") or {}).get("users")
+            r["listGroups"] = [{"operator": g.get("operator"), "listIds": g.get("listIds", [])}
+                               for g in d.get("listGroups", [])]
+
+    if args.json:
+        _output_json(rows)
+        return
+    if not rows:
+        print("No retargeting combinations found.")
+        return
+    print(f"{'Comb. ID':<12} {'Name':<40} {'Status':<8}" + (f" {'Users':>9}  Groups" if args.detail else ""))
+    print("-" * (62 + (40 if args.detail else 0)))
+    for r in rows:
+        line = f"{r['combinationId'] or '':<12} {(r['name'] or ''):<40} {(r['status'] or ''):<8}"
+        if args.detail:
+            groups = " AND ".join(f"{g['operator']}({','.join(map(str, g['listIds']))})"
+                                  for g in r.get("listGroups", []))
+            line += f" {r.get('users') if r.get('users') is not None else '?':>9}  {groups}"
+        print(line)
+
+
+def cmd_retargeting_combination_create(args: argparse.Namespace) -> None:
+    """Create a retargeting combination from existing lists."""
+    attributes: dict = {"name": args.name}
+    if args.description:
+        attributes["description"] = args.description
+    combo = {"attributes": attributes, "listGroups": _combination_groups(args)}
+
+    data = _api_call("retargeting.combinations.create", [[combo]], getattr(args, "user_id", None))
+    ids = data.get("combinationIds", [])
+    if args.json:
+        _output_json({"combinationIds": ids, "listGroups": combo["listGroups"]})
+    else:
+        print(f"Retargeting combination created: ID {ids[0] if ids else '?'}")
+
+
+def cmd_retargeting_combination_update(args: argparse.Namespace) -> None:
+    """Rename / re-describe / pause / resume a combination (list groups are left as they are)."""
+    attributes: dict = {}
+    if args.name:
+        attributes["name"] = args.name
+    if args.description is not None:
+        attributes["description"] = args.description
+    if args.status:
+        attributes["status"] = args.status
+    if not attributes:
+        _fail_msg("No fields to update. Use --name, --description or --status.")
+
+    _api_call("retargeting.combinations.update", [[{
+        "combinationId": args.combination_id, "attributes": attributes,
+    }]], getattr(args, "user_id", None))
+    if args.json:
+        _output_json({"updated": True, "combinationId": args.combination_id})
+    else:
+        print(f"Retargeting combination {args.combination_id} updated.")
+
+
+def cmd_retargeting_combination_remove(args: argparse.Namespace) -> None:
+    """Remove a retargeting combination."""
+    if not args.confirm:
+        _fail_msg("Requires --confirm flag.")
+    _api_call("retargeting.combinations.remove", [[args.combination_id]], getattr(args, "user_id", None))
+    if args.json:
+        _output_json({"removed": True, "combinationId": args.combination_id})
+    else:
+        print(f"Retargeting combination {args.combination_id} removed.")
+
+
+def cmd_retargeting_combination_attach(args: argparse.Namespace) -> None:
+    """Attach a combination to an ad group as targeting."""
+    data = _api_call("retargeting.group.combinations.add", [[{
+        "combinationId": args.combination_id, "groupId": args.group_id,
+    }]], getattr(args, "user_id", None))
+    if args.json:
+        _output_json({"attached": True, "combinationId": args.combination_id,
+                      "groupId": args.group_id, "count": data.get("count")})
+    else:
+        print(f"Retargeting combination {args.combination_id} attached to group {args.group_id}.")
+
+
+def cmd_retargeting_combination_detach(args: argparse.Namespace) -> None:
+    """Detach a combination from an ad group."""
+    if not args.confirm:
+        _fail_msg("Requires --confirm flag.")
+    data = _api_call("retargeting.group.combinations.remove", [[{
+        "combinationId": args.combination_id, "groupId": args.group_id,
+    }]], getattr(args, "user_id", None))
+    if args.json:
+        _output_json({"detached": True, "combinationId": args.combination_id,
+                      "groupId": args.group_id, "count": data.get("count")})
+    else:
+        print(f"Retargeting combination {args.combination_id} detached from group {args.group_id}.")
+
+
+def cmd_retargeting_combinations_attached(args: argparse.Namespace) -> None:
+    """List combinations attached to a group (or to all groups)."""
+    uid = getattr(args, "user_id", None)
+    attached = _list_by_groups("retargeting.group.combinations.list", "combinations",
+                               _group_ids(args.group_id, uid), uid)
+    rows = [{
+        "combinationId": r.get("combinationId"),
+        "groupId": r.get("groupId"),
+        "name": r.get("name"),
+        "status": r.get("status"),
+    } for r in attached]
+
+    if args.json:
+        _output_json(rows)
+        return
+    if not rows:
+        print("No combinations attached.")
+        return
+    print(f"{'Comb. ID':<12} {'Group ID':<12} {'Name':<40} {'Status'}")
+    print("-" * 78)
+    for r in rows:
+        print(f"{r['combinationId'] or '':<12} {r['groupId'] or '':<12} "
+              f"{(r['name'] or ''):<40} {r['status'] or ''}")

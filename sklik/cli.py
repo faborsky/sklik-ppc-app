@@ -50,6 +50,12 @@ from sklik.commands.retargeting import (
     cmd_retargeting_attach, cmd_retargeting_detach, cmd_retargeting_attached,
     cmd_retargeting_exclude, cmd_retargeting_exclude_remove, cmd_retargeting_excluded,
 )
+from sklik.commands.retargeting import (
+    cmd_retargeting_combinations, cmd_retargeting_combination_create,
+    cmd_retargeting_combination_update, cmd_retargeting_combination_remove,
+    cmd_retargeting_combination_attach, cmd_retargeting_combination_detach,
+    cmd_retargeting_combinations_attached,
+)
 from sklik.commands.banners import (
     cmd_banner_formats, cmd_banners, cmd_banner_create, cmd_banner_download, cmd_banner_remove,
     cmd_banner_update, cmd_banner_restore,
@@ -810,6 +816,62 @@ def main() -> None:
     p.add_argument("--group-id", type=int, help="Filter by group ID")
     p.add_argument("--json", **json_kwargs)
 
+    # --- retargeting combinations ---
+    p = subparsers.add_parser(
+        "retargeting-combinations",
+        help="List retargeting combinations (lists joined with and/or/not)")
+    p.add_argument("--detail", action="store_true", help="Add list groups and user counts")
+    p.add_argument("--include-deleted", action="store_true", help="Also show removed combinations")
+    p.add_argument("--json", **json_kwargs)
+
+    p = subparsers.add_parser(
+        "retargeting-combination-create",
+        help="Create a combination; each --and/--or/--not is one list group, groups are ANDed")
+    p.add_argument("--name", required=True, help="Combination name")
+    p.add_argument("--description", help="Optional description")
+    p.add_argument("--and", dest="op_and", action="append", metavar="IDS",
+                   help="List IDs (comma-separated) the user must be in ALL of; repeatable")
+    p.add_argument("--or", dest="op_or", action="append", metavar="IDS",
+                   help="List IDs (comma-separated) the user must be in AT LEAST ONE of; repeatable")
+    p.add_argument("--not", dest="op_not", action="append", metavar="IDS",
+                   help="List IDs (comma-separated) the user must be in NONE of; repeatable")
+    p.add_argument("--groups-json",
+                   help='Advanced: raw listGroups, e.g. \'[{"operator":"or","listIds":[1,2]}]\'')
+    p.add_argument("--json", **json_kwargs)
+
+    p = subparsers.add_parser(
+        "retargeting-combination-update",
+        help="Rename / re-describe / pause / resume a combination (list groups unchanged)")
+    p.add_argument("--combination-id", type=int, required=True, help="Combination ID")
+    p.add_argument("--name", help="New name")
+    p.add_argument("--description", help="New description")
+    p.add_argument("--status", choices=["active", "suspend"], help="Activate or pause")
+    p.add_argument("--json", **json_kwargs)
+
+    p = subparsers.add_parser("retargeting-combination-remove", help="Remove a combination")
+    p.add_argument("--combination-id", type=int, required=True, help="Combination ID")
+    p.add_argument("--confirm", action="store_true", help="Required for deletion")
+    p.add_argument("--json", **json_kwargs)
+
+    p = subparsers.add_parser(
+        "retargeting-combination-attach", help="Attach a combination to an ad group as targeting")
+    p.add_argument("--combination-id", type=int, required=True, help="Combination ID")
+    p.add_argument("--group-id", type=int, required=True, help="Group ID")
+    p.add_argument("--json", **json_kwargs)
+
+    p = subparsers.add_parser(
+        "retargeting-combination-detach", help="Detach a combination from an ad group")
+    p.add_argument("--combination-id", type=int, required=True, help="Combination ID")
+    p.add_argument("--group-id", type=int, required=True, help="Group ID")
+    p.add_argument("--confirm", action="store_true", help="Required for detaching")
+    p.add_argument("--json", **json_kwargs)
+
+    p = subparsers.add_parser(
+        "retargeting-combinations-attached",
+        help="List combinations attached to a group (all groups if omitted)")
+    p.add_argument("--group-id", type=int, help="Group ID (all groups if omitted)")
+    p.add_argument("--json", **json_kwargs)
+
     # --- banner-formats ---
     p = subparsers.add_parser("banner-formats", help="List allowed banner formats")
     p.add_argument("--json", **json_kwargs)
@@ -1334,6 +1396,13 @@ def main() -> None:
         "retargeting-exclude": cmd_retargeting_exclude,
         "retargeting-exclude-remove": cmd_retargeting_exclude_remove,
         "retargeting-excluded": cmd_retargeting_excluded,
+        "retargeting-combinations": cmd_retargeting_combinations,
+        "retargeting-combination-create": cmd_retargeting_combination_create,
+        "retargeting-combination-update": cmd_retargeting_combination_update,
+        "retargeting-combination-remove": cmd_retargeting_combination_remove,
+        "retargeting-combination-attach": cmd_retargeting_combination_attach,
+        "retargeting-combination-detach": cmd_retargeting_combination_detach,
+        "retargeting-combinations-attached": cmd_retargeting_combinations_attached,
         "banner-update": cmd_banner_update,
         "banner-restore": cmd_banner_restore,
         "placements-excluded": cmd_placements_excluded,

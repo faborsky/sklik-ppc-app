@@ -373,6 +373,22 @@ Konverze = pojmenovaná definice cílové akce (nákup, registrace…) a její h
 > Publikum jde napojit jen na sestavy **obsahových** kampaní. Pokus o napojení **smazaného** seznamu vrací `406 Bad values` bez bližší diagnostiky, zkontroluj `deleted` ve výpisu `retargeting --json`.
 > **Vyloučení publika** (`retargeting-exclude`) funguje na úrovni kampaně i sestavy, typicky „vyluč stávající zákazníky z akviziční kampaně“. Na rozdíl od napojení funguje i na search kampaních.
 
+#### Kombinace publik
+
+Spojení existujících seznamů logikou A / NEBO / NE. Každé `--and` / `--or` / `--not` je jedna skupina seznamů, skupiny mezi sebou platí současně (A). Příklad časového pásma: `--and <7d> --not <3d>` = návštěvníci před 4–7 dny. Opuštěný košík bez nákupu: `--or <košík 7d> --not <transakce 7d>`.
+
+| Příkaz | Klíčové přepínače |
+|--------|-------------------|
+| `retargeting-combinations` | `--detail` (skupiny seznamů a počet uživatelů), `--include-deleted`, `--json` |
+| `retargeting-combination-create` | `--name`, `--description`, `--and IDS`, `--or IDS`, `--not IDS` (opakovatelné, ID oddělená čárkou), `--groups-json` (pokročilé), `--json` |
+| `retargeting-combination-update` | `--combination-id`, `--name`, `--description`, `--status` (active/suspend), `--json`. Skupiny seznamů nemění |
+| `retargeting-combination-remove` | `--combination-id`, `--confirm`, `--json` |
+| `retargeting-combination-attach` | `--combination-id`, `--group-id`, `--json`. Napojí kombinaci na sestavu jako cílení |
+| `retargeting-combination-detach` | `--combination-id`, `--group-id`, `--confirm`, `--json` |
+| `retargeting-combinations-attached` | `--group-id` (bez něj všechny sestavy), `--json` |
+
+> Kombinace **nevrací** `retargeting` (výpis seznamů), mají vlastní jmenný prostor. Kombinaci jen ze skupin `--not` Sklik odmítne. K vyloučení kombinace použij `retargeting-exclude --list-id <ID kombinace>`.
+
 ### Obrázkové bannery
 
 Statické bannery (jpg/png/gif) pro obsahovou síť. Pro HTML5 bannery použij jiný nástroj, tady jde o statické formáty.
@@ -549,6 +565,7 @@ Datum se posílá bez času; API ho uloží jako půlnoc místního času (`2026
 ./run.sh conversions
 ./run.sh sem-conversions                              # SEM účty: konverze přes Fénix
 ./run.sh retargeting
+./run.sh retargeting-combinations --detail           # kombinace publik (výpis `retargeting` je nevrací)
 ./run.sh banner-formats
 
 # Kombinovaná (nativní) reklama pro obsahovou síť

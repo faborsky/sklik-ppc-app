@@ -42,7 +42,7 @@ CLI accepts/displays **CZK**; the API uses haléře (100 = 1 Kč). Conversion is
 
 **`fenix-*` commands**: flags take CZK like everywhere else (`--day-budget`, `--cpc`, `--cpm`) and the human output prints Kč, but **`--json` is the raw API payload — `budget.dayBudget`, `exhaustedDayBudget`, `cpc`, `cpm` are haléře there**, unlike `campaigns --json` / `groups --json`, which convert to CZK. `fenix-credit` is plain CZK (`credit`, `creditWithVat`); its `agencyLimit` has no unit in the spec and is passed through unlabelled. Verified against a live account on 2026-10-02: `budget.dayBudget` and `cpc` are haléře, `credit` is CZK; `exhaustedDayBudget`, `cpm` and `agencyLimit` are still the spec's word only.
 
-## Commands (117, grouped)
+## Commands (124, grouped)
 
 **Full flag reference + examples: [README.md](README.md).** Index:
 
@@ -57,6 +57,7 @@ CLI accepts/displays **CZK**; the API uses haléře (100 = 1 Kč). Conversion is
 - **Callouts (popisky):** `callouts`, `callout-create/remove`, `callout-assign` (replaces the callouts, keeps the sitelinks; `--dry-run`), `callouts-assigned`. A callout is a `sitelinks.*` record without a URL; the CLI keeps the two apart.
 - **Conversions:** `conversions`, `conversion-types`, `conversion-create/update/remove`
 - **Retargeting:** `retargeting`, `retargeting-create/update/remove`, **`retargeting-attach/detach`** (audience ↔ group), `retargeting-attached`, **`retargeting-exclude`** (+`-remove`) — negative retargeting at campaign OR group level, `retargeting-excluded`
+- **Retargeting combinations:** `retargeting-combinations`, `retargeting-combination-create/update/remove/attach/detach`, `retargeting-combinations-attached` — lists joined with and/or/not (`--and/--or/--not`, each flag one list group, groups ANDed); not returned by `retargeting`; excluded with `retargeting-exclude --list-id <combination ID>`
 - **Banners:** `banner-formats`, `banners`, `banner-create`, `banner-download`, `banner-update`, `banner-remove`, `banner-restore`
 - **Placements:** `placements`, `placement-create/remove`, `placements-excluded`, `placement-exclude` (+`-remove`/`-restore`) — negative placements
 - **Display targeting:** `targeting-categories`, `targeting`, `targeting-add`, `targeting-exclude`, `targeting-remove`, `targeting-restore` — unified `--type interest/theme/intend`
