@@ -251,7 +251,7 @@ def main() -> None:
         "pulse",
         help="Account-wide PPC pulse: one compact digest (totals + per-campaign + deltas)",
     )
-    p.add_argument("--days", type=int, default=7, help="Window length in days (default 7)")
+    p.add_argument("--days", type=int, default=7, help="Complete days ending yesterday (default 7)")
     p.add_argument("--date-from", help="Start date YYYY-MM-DD (use with --date-to; overrides --days)")
     p.add_argument("--date-to", help="End date YYYY-MM-DD (use with --date-from; overrides --days)")
     p.add_argument("--no-compare", action="store_true",
