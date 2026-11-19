@@ -186,13 +186,15 @@ Souhrn celého účtu **jedním voláním**, místo řetězení `account` + `cam
 | `pulse` | `--days N` (default 7), `--date-from`/`--date-to` (přebijí `--days`), `--no-compare` (vynechá delty, o 1 API volání míň), `--json` |
 
 ```bash
-./run.sh pulse                 # posledních 7 dní vs předchozích 7
-./run.sh pulse --days 30       # posledních 30 dní vs předchozích 30
+./run.sh pulse                 # posledních 7 celých dní do včerejška vs předchozích 7
+./run.sh pulse --days 30       # posledních 30 celých dní do včerejška vs předchozích 30
 ./run.sh pulse --no-compare    # bez srovnání s předchozím obdobím
 ./run.sh pulse --json          # strukturovaný výstup pro další zpracování
 ```
 
-> `pulse` si přes `stats.status` ověří, že statistiky za celé okno jsou už kompletní. Když ne (typicky dnešek je „preparing“), přidá varování (`statsWarning` v `--json`), že čísla a delty jsou zatím z částečných dat.
+> Sklik API dnešní statistiky bez `includeCurrentDayStats` nevrací (CLI ho neposílá). Když `--date-to` sahá na dnešek nebo později, `pulse` i ostatní statistické příkazy DRAKu (campaign-/group-/keyword-/ad-stats, search-queries) upozorní, že dnešek v datech chybí (u `pulse` i `todayWarning` v `--json`). Nekompletní dny okna dál hlídá `stats.status` (`statsWarning`).
+
+V přehledu jsou všechny kampaně s aktivitou v období, i ty s opožděnými konverzemi bez zobrazení. Mezi hlavními pohyby jsou i kampaně, které přestaly utrácet. JSON klíč `hiddenZeroImpressionCampaigns` dál počítá kampaně aktuálního reportu bez zobrazení (i nově zobrazené v přehledu), nový `hiddenInactiveCampaigns` počítá skutečně skryté kampaně bez jakékoli aktivity.
 
 ### Kampaně
 

@@ -29,7 +29,7 @@ def cmd_placements(args: argparse.Namespace) -> None:
     report = _fetch_report(
         "patterns", {}, date_from, date_to,
         ["id", "pattern", "status", "cpc", "group.id", "group.name"],
-        user_id=getattr(args, "user_id", None))
+        user_id=getattr(args, "user_id", None), warn_today=False)
 
     if args.group_id:
         report = [r for r in report

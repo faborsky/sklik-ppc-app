@@ -108,7 +108,7 @@ def cmd_targeting(args: argparse.Namespace) -> None:
         report = _fetch_report(
             dim["ns"], {"isDeleted": False}, date_from, date_to,
             ["id", "categoryId", "group.id", "group.name", "status", "cpc", "cpt"],
-            user_id=uid)
+            user_id=uid, warn_today=False)
 
     if args.group_id:
         report = [r for r in report

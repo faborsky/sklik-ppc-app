@@ -1,6 +1,9 @@
 """Two-step report helper (createReport -> readReport)."""
 from __future__ import annotations
 
+import sys
+from datetime import datetime
+
 from sklik.api import _api_call, _list_page_size
 
 
@@ -89,6 +92,31 @@ def _read_report_rows(
     return rows[:limit] if limit is not None else rows
 
 
+_TODAY_STATS_WARNING = (
+    "Sklik API dnešní statistiky nevrací, dnešek proto v datech chybí."
+)
+_today_stats_warned = False
+
+
+def _warn_today_stats(
+    date_to: str, today: str | None = None, *, suffix: str = "", emit: bool = True,
+) -> str | None:
+    """Warn once per process; always return the warning for an affected window."""
+    global _today_stats_warned
+    try:
+        end = datetime.strptime(date_to, "%Y-%m-%d").date()
+        current = datetime.strptime(today, "%Y-%m-%d").date() if today else datetime.now().date()
+    except (ValueError, TypeError):
+        return None
+    if end < current:
+        return None
+    warning = _TODAY_STATS_WARNING + suffix
+    if emit and not _today_stats_warned:
+        print(f"⚠️  {warning}", file=sys.stderr)
+    _today_stats_warned = True
+    return warning
+
+
 def _fetch_report(
     entity: str,
     restriction: dict,
@@ -98,8 +126,16 @@ def _fetch_report(
     granularity: str = "total",
     limit: int | None = None,
     user_id: int | None = None,
+    *,
+    warn_today: bool = True,
 ) -> list[dict]:
-    """Create and read a report in one step (all rows unless `limit` says less)."""
+    """Create and read a report in one step (all rows unless `limit` says less).
+
+    Configuration listings and callers rendering their own warning opt out
+    with `warn_today=False`.
+    """
+    if warn_today:
+        _warn_today_stats(date_to)
     # Dates go in restrictionFilter, granularity in displayOptions
     restriction_with_dates = dict(restriction)
     restriction_with_dates["dateFrom"] = date_from

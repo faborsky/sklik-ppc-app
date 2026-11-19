@@ -12,7 +12,7 @@ from sklik.api import _api_call, _fail_msg, _load_rate_state, RATE_LIMIT_SAFETY
 from sklik.formatting import (
     _halere_to_czk, _format_money, _output_json, _convert_stats_to_czk,
 )
-from sklik.reports import _fetch_report, STAT_COLUMNS
+from sklik.reports import _fetch_report, _warn_today_stats, STAT_COLUMNS
 
 
 
@@ -135,6 +135,12 @@ def _pct_delta(cur: float, prev: float | None) -> str:
     return f"{arrow}{abs(pct):.0f}%"
 
 
+def _has_activity(stats: dict) -> bool:
+    """Include delayed conversions even when there were no impressions."""
+    return any(stats.get(k) for k in
+               ("impressions", "clicks", "totalMoney", "conversions", "conversionValue", "transactions"))
+
+
 def cmd_pulse(args: argparse.Namespace) -> None:
     """Account-wide PPC pulse — ONE compact digest instead of many calls.
 
@@ -156,31 +162,43 @@ def cmd_pulse(args: argparse.Namespace) -> None:
         window = (d_to - d_from).days + 1
     else:
         window = args.days
-        d_to = today
-        d_from = today - timedelta(days=window - 1)
+        d_to = today - timedelta(days=1)
+        d_from = d_to - timedelta(days=window - 1)
         date_from = d_from.strftime("%Y-%m-%d")
         date_to = d_to.strftime("%Y-%m-%d")
 
+    today_warning = _warn_today_stats(
+        date_to, today.strftime("%Y-%m-%d"),
+        suffix=" Období proto nejsou přímo srovnatelná." if not args.no_compare else "",
+        emit=bool(args.json),  # the text digest shows it in its header instead
+    )
     user_id = getattr(args, "user_id", None)
     cols = ["id", "name"] + STAT_COLUMNS
-    cur_report = _fetch_report("campaigns", {}, date_from, date_to, cols, user_id=user_id)
+    cur_report = _fetch_report("campaigns", {}, date_from, date_to, cols,
+                               user_id=user_id, warn_today=False)
 
     compare = not args.no_compare
     prev_map: dict = {}
+    prev_report = []
     prev_from = prev_to = None
     if compare:
         prev_to_dt = d_from - timedelta(days=1)
         prev_from_dt = prev_to_dt - timedelta(days=window - 1)
         prev_from = prev_from_dt.strftime("%Y-%m-%d")
         prev_to = prev_to_dt.strftime("%Y-%m-%d")
-        prev_report = _fetch_report("campaigns", {}, prev_from, prev_to, cols, user_id=user_id)
+        prev_report = _fetch_report("campaigns", {}, prev_from, prev_to, cols,
+                                    user_id=user_id, warn_today=False)
         prev_map = {r.get("id"): _first_stats(r) for r in prev_report}
 
     # Per-campaign rows (cost stays in haléře until display; conversionValue
     # arrives from the API already in CZK — see docs/api-notes.md); accumulate totals.
     rows = []
     tot = {"clicks": 0, "impressions": 0, "totalMoney": 0, "conversions": 0.0, "conversionValue": 0}
-    for r in cur_report:
+    cur_ids = {r.get("id") for r in cur_report}
+    # Previous-only campaigns have zero current stats but still belong in movers.
+    report_rows = cur_report + [{"id": r.get("id"), "name": r.get("name", "?")}
+                                for r in prev_report if r.get("id") not in cur_ids]
+    for r in report_rows:
         s = _first_stats(r)
         cid = r.get("id")
         clicks = s.get("clicks", 0) or 0
@@ -203,6 +221,7 @@ def cmd_pulse(args: argparse.Namespace) -> None:
             "d_cost": _pct_delta(cost, p.get("totalMoney")) if compare else None,
             "d_clicks": _pct_delta(clicks, p.get("clicks")) if compare else None,
             "d_conv": _pct_delta(conv, p.get("conversions")) if compare else None,
+            "_active": _has_activity(s), "_prev_active": _has_activity(p),
             "_cost": cost, "_prev_cost": p.get("totalMoney") or 0,
             "_conv": conv, "_prev_conv": p.get("conversions") or 0,
         })
@@ -220,8 +239,11 @@ def cmd_pulse(args: argparse.Namespace) -> None:
         ptot["conversions"] += s.get("conversions", 0) or 0
         ptot["conversionValue"] += s.get("conversionValue", 0) or 0
 
-    active = sorted((r for r in rows if r["impressions"] > 0), key=lambda r: r["_cost"], reverse=True)
-    hidden = len(rows) - len(active)
+    active = sorted((r for r in rows if r["_active"]), key=lambda r: r["_cost"], reverse=True)
+    hidden = len(cur_report) - len(active)
+    # Preserve the original counter even though zero-impression rows may now be listed.
+    zero_impressions = len(cur_report) - sum(
+        (_first_stats(r).get("impressions", 0) or 0) > 0 for r in cur_report)
 
     totals = {
         "cost_czk": tot["totalMoney"] / 100,
@@ -242,10 +264,11 @@ def cmd_pulse(args: argparse.Namespace) -> None:
     # Movers: biggest absolute cost & conversion swings vs previous period.
     movers = []
     if compare:
-        for r in sorted(active, key=lambda r: abs(r["_cost"] - r["_prev_cost"]), reverse=True)[:3]:
+        mover_rows = [r for r in rows if r["_active"] or r["_prev_active"]]
+        for r in sorted(mover_rows, key=lambda r: abs(r["_cost"] - r["_prev_cost"]), reverse=True)[:3]:
             if r["_cost"] != r["_prev_cost"]:
                 movers.append(f"{r['name']}: cost {r['d_cost']}")
-        for r in sorted(active, key=lambda r: abs(r["_conv"] - r["_prev_conv"]), reverse=True)[:2]:
+        for r in sorted(mover_rows, key=lambda r: abs(r["_conv"] - r["_prev_conv"]), reverse=True)[:2]:
             if r["_conv"] != r["_prev_conv"]:
                 movers.append(f"{r['name']}: conv {r['d_conv']}")
 
@@ -275,15 +298,19 @@ def cmd_pulse(args: argparse.Namespace) -> None:
             "period": {"from": date_from, "to": date_to, "days": window},
             "comparePeriod": ({"from": prev_from, "to": prev_to} if compare else None),
             "statsWarning": stats_warning,
+            "todayWarning": today_warning,
             "totals": totals,
             "campaigns": [{k: v for k, v in r.items() if not k.startswith("_")} for r in active],
-            "hiddenZeroImpressionCampaigns": hidden,
+            "hiddenZeroImpressionCampaigns": zero_impressions,
+            "hiddenInactiveCampaigns": hidden,
             "movers": movers,
         })
         return
 
     # --- compact text digest ---
     print(f"Sklik pulse — {args.account}  ({date_from} → {date_to}, {window}d)")
+    if today_warning:
+        print(f"⚠️  {today_warning}")
     if compare:
         print(f"vs předchozích {window} dní ({prev_from} → {prev_to})")
     if stats_warning:
@@ -305,10 +332,9 @@ def cmd_pulse(args: argparse.Namespace) -> None:
     print()
 
     if not active:
-        print("Žádná kampaň se zobrazeními v období.")
-        return
-
-    print("Kampaně (aktivní v období, dle nákladů):")
+        print("Žádná kampaň s aktivitou v období.")
+    else:
+        print("Kampaně (aktivní v období, dle nákladů):")
     for r in active:
         name = r["name"][:30]
         pno_c = f"{r['pno']:.0f}%" if r["pno"] is not None else "—"
@@ -320,7 +346,7 @@ def cmd_pulse(args: argparse.Namespace) -> None:
             f"conv {r['conversions']:>3.0f} {dconv:<6} PNO {pno_c}"
         )
     if hidden:
-        print(f"  (+{hidden} kampaní bez zobrazení skryto)")
+        print(f"  Skryté kampaně bez aktivity: {hidden}")
 
     if movers:
         print()

@@ -46,7 +46,7 @@ CLI accepts/displays **CZK**; the API uses haléře (100 = 1 Kč). Conversion is
 
 **Full flag reference + examples: [README.md](README.md).** Index:
 
-- **Overview:** `account`, `api-limits`, `pulse` (warns when the window's stats aren't complete yet), `credit`, `regions`, `autotagging`, `autotagging-update`
+- **Overview:** `account`, `api-limits`, `pulse` (last N complete days through yesterday; warns about missing today or incomplete stats), `credit`, `regions`, `autotagging`, `autotagging-update`
 - **Campaigns:** `campaigns`, `campaign-create/update/remove/restore/stats/targeting` — targeting: `--regions` (replaces the whole set; **cannot be cleared via the API**), `--device-bids` (whole percents only), `--schedule-json` (7×24 array, `null` clears), `--ad-selection {weighted,random,cpa,cos}`, `--start-date` / `--end-date` (`YYYY-MM-DD`; `none` clears on update)
 - **Groups:** `groups`, `group-create/update/remove/restore/stats` — `--max-daily-impression` = frequency cap (the campaign-level cap is invisible to DRAK — read it with `fenix-campaigns`, write it with `fenix-campaign-update --capping-*`; the group cap wins where both are set); `group-stats` is the only entity returning `winRate`
 - **Keywords:** `keywords`, `keyword-create`, `keyword-create-batch`, `keyword-update/remove/restore/stats`, **`keyword-set`** (declarative upsert; `--remove-others` = full sync)

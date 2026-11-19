@@ -40,7 +40,7 @@ The app reads tokens from environment variables in the app's `.env` file. You do
 Use these exact commands:
 
 - **Account**: `account`, `api-limits` (rate/batch/value limits + live local request-budget usage), `credit` (wallet balance CZK), `regions` (region-ID catalog for `--regions`), `autotagging` / `autotagging-update` (UTM config)
-- **Pulse**: `pulse` — **account-wide overview in ONE call** (totals + per-campaign + deltas vs the previous equal-length period + top movers). Flags: `--days N` (default 7), `--date-from`/`--date-to`, `--no-compare`, `--json`. **Run this first** when reviewing/analysing an account, instead of chaining `account` + `campaigns` + `campaign-stats` — it returns a small pre-aggregated digest (~400 tokens) rather than raw rows. Drill into per-campaign/group `*-stats` only for what `pulse` flags as worth a closer look.
+- **Pulse**: `pulse` — **account-wide overview in ONE call** (totals + per-campaign + deltas vs the previous equal-length period + top movers). Flags: `--days N` (default 7 complete days ending yesterday), `--date-from`/`--date-to`, `--no-compare`, `--json`. **Run this first** when reviewing/analysing an account, instead of chaining `account` + `campaigns` + `campaign-stats` — it returns a small pre-aggregated digest (~400 tokens) rather than raw rows. Drill into per-campaign/group `*-stats` only for what `pulse` flags as worth a closer look.
 - **Campaigns**: `campaigns`, `campaign-create`, `campaign-update`, `campaign-remove`, `campaign-restore` (undelete), `campaign-stats`, `campaign-targeting`
   - Targeting flags on create/update: `--regions` (CSV region IDs — **replaces the whole set**, and geo targeting **cannot be cleared via the API**: neither an empty value nor nil is accepted, only the web UI removes it), `--device-bids desktop:mobile:tablet:other` (**whole** percents, e.g. `0:-30:-30:-100`), `--schedule-json` (update only — 7 day-arrays × 24 hourly values 0-100, week starts Monday: `'[[0,…,100,…], …×7]'`; `null` clears it), `--ad-selection {weighted,random,cpa,cos}` (ad rotation — `random` = even split for a clean creative A/B test); `campaigns` reads the current rotation back in the `Rotation` column, `campaign-targeting` reads geo/device/schedule back
 - **Groups**: `groups`, `group-create`, `group-update`, `group-remove`, `group-restore`, `group-stats`
@@ -287,6 +287,8 @@ Start with `pulse` for the whole-account picture in a single call (totals, per-c
 ```
 
 ### Phase 1 — Pull data
+
+By default, `pulse` covers complete days through yesterday: DRAK does not return today's stats (`todayWarning` if you pass a `--date-to` of today or later). Its campaign list includes delayed conversions without impressions, and movers include campaigns that stopped spending.
 
 `pulse` already gives you campaign-level numbers + deltas. Drill into the granular `*-stats` only for the campaigns/groups `pulse` flags as worth it (don't pull every command for every campaign):
 
