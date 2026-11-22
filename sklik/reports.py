@@ -1,6 +1,8 @@
 """Two-step report helper (createReport -> readReport)."""
 from __future__ import annotations
 
+from datetime import datetime
+
 from sklik.api import _api_call, _list_page_size
 
 
@@ -40,6 +42,18 @@ STAT_COLUMNS = list(BASE_STAT_COLUMNS)
 STAT_GRANULARITIES = ["total", "daily", "weekly", "monthly", "quarterly", "yearly"]
 
 
+# Entities whose whitelist does NOT contain the whole shared base: their full
+# stat-column list. `patterns` (placements) lacks `ishContext`/`ishSum` —
+# whitelist read live 2026-11-19 from the 400 of a bogus column.
+_ENTITY_STAT_COLUMNS = {
+    "patterns": ["clicks", "impressions", "ctr", "avgCpc", "avgCpt", "avgPos",
+                 "totalMoney", "impressionMoney", "clickMoney",
+                 "conversions", "conversionValue", "transactions", "pno",
+                 "missImpressions", "underLowerThreshold", "underForestThreshold",
+                 "exhaustedBudget", "exhaustedBudgetShare", "stoppedBySchedule", "ish"],
+}
+
+
 def stat_columns(entity: str) -> list[str]:
     """Stat columns valid for `entity`: the shared base plus its extras.
 
@@ -47,7 +61,31 @@ def stat_columns(entity: str) -> list[str]:
     report has no equivalent, and campaign-level frequency capping isn't
     exposed by the API at all.
     """
+    if entity in _ENTITY_STAT_COLUMNS:
+        return list(_ENTITY_STAT_COLUMNS[entity])
     return BASE_STAT_COLUMNS + _ENTITY_EXTRA_STAT_COLUMNS.get(entity, [])
+
+
+def _period_count(date_from: str, date_to: str, granularity: str) -> int:
+    """Upper bound of the periods one entity spans in a split report.
+
+    The data cap (`statsDataLimit`, 5000) counts entities × periods: a daily
+    report of 5000 keywords over 29 days fails with "you are requiring 145000
+    data" (seen live 2026-11-18). Overestimating is harmless (smaller pages),
+    underestimating is a 406, so partial periods at both ends count as whole."""
+    if granularity in (None, "", "total"):
+        return 1
+    d1 = datetime.strptime(date_from, "%Y-%m-%d").date()
+    d2 = datetime.strptime(date_to, "%Y-%m-%d").date()
+    days = max((d2 - d1).days + 1, 1)
+    months = (d2.year - d1.year) * 12 + d2.month - d1.month + 1
+    return {
+        "daily": days,
+        "weekly": days // 7 + 2,
+        "monthly": months,
+        "quarterly": months // 3 + 2,
+        "yearly": d2.year - d1.year + 1,
+    }.get(granularity, days)
 
 
 def _read_report_rows(
@@ -57,6 +95,7 @@ def _read_report_rows(
     read_opts: dict,
     limit: int | None,
     user_id: int | None,
+    periods: int = 1,
 ) -> list[dict]:
     """Read a prepared report, walking offsets to the end of `total_count`.
 
@@ -72,8 +111,10 @@ def _read_report_rows(
     the page size, NEVER by len(rows) — that would re-read and duplicate.
 
     `limit` (when given) is the caller's own cap on ROWS, e.g. `--limit`.
+    `periods` (from `_period_count`) shrinks the page for split reports, where
+    the cap counts entities × periods.
     """
-    page_size = _list_page_size(user_id)
+    page_size = max(_list_page_size(user_id) // max(periods, 1), 1)
     rows: list[dict] = []
     offset = 0
     while offset < total_count:
@@ -120,7 +161,23 @@ def _fetch_report(
     return _read_report_rows(entity, report_id, total_count, {
         "allowEmptyStatistics": True,
         "displayColumns": cols,
-    }, limit, user_id)
+    }, limit, user_id, periods=_period_count(date_from, date_to, granularity))
+
+
+def _group_entity_ids(list_method: str, result_key: str, group_id: int,
+                      user_id: int | None) -> list[int]:
+    """IDs of the keywords/ads of ONE group, for an `ids` report restriction.
+
+    The report API ignores `group.ids`, so a per-group report used to fetch the
+    stats of the whole account and filter afterwards — on a 15 000-keyword
+    account that is hundreds of thousands of data points. `ids` (own entity
+    IDs) IS honoured, so the group's IDs are listed first (deleted ones too:
+    they can still carry stats in the window)."""
+    from sklik.api import _fetch_all
+    rows = _fetch_all(list_method, {}, ["id", "group.id"], result_key, user_id)
+    return [r["id"] for r in rows
+            if (r.get("group", {}).get("id") if isinstance(r.get("group"), dict)
+                else r.get("group.id")) == group_id]
 
 
 def _fetch_listing_report(

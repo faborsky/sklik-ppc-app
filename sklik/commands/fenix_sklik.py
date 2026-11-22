@@ -66,7 +66,7 @@ _AD_ATTRS = ("id", "type", "status", "adStatus", "isDeleted", "createDate",
              "path1", "path2", "finalUrl", "mobileFinalUrl", "trackingTemplate",
              # banner / combined naming, so non-ETA rows are not blank
              "name", "shortLine", "longLine", "companyName")
-_NEGATIVE_ATTRS = ("name", "matchType")
+_NEGATIVE_ATTRS = ("name", "matchType", "network")
 _ACCOUNT_ATTRS = ("id", "username", "access", "agencyStatus", "relationStatus")
 
 # Fénix calls the broad negative match plain `negative` (DRAK: `negativeBroad`).
@@ -98,6 +98,16 @@ def _negatives_path(campaign_id: int, group_id: int | None) -> str:
 def _negative_item(args: argparse.Namespace) -> dict:
     return {"name": args.name,
             "matchType": _MATCH_ALIASES.get(args.match_type, args.match_type)}
+
+
+def _negative_body(args: argparse.Namespace, item: dict) -> dict:
+    """Write body of the negative-keyword add/delete. `network` (spec 1.40.0) is
+    one value for the whole body; omitted → server default by campaign type on
+    add, BOTH networks on delete."""
+    body: dict = {"negativeKeywords": [item]}
+    if getattr(args, "network", None):
+        body["network"] = args.network
+    return body
 
 
 def _created_ids(data: dict) -> list:
@@ -294,9 +304,11 @@ def cmd_fenix_ads(args: argparse.Namespace) -> None:
 
 def cmd_fenix_negatives(args: argparse.Namespace) -> None:
     """List negative keywords of a campaign (campaign level) or of one group."""
+    params: dict = {"a": list(_NEGATIVE_ATTRS)}
+    if getattr(args, "network", None):
+        params["network"] = args.network
     negatives = fenix.fetch_all_offset(
-        _negatives_path(args.campaign_id, args.group_id),
-        {"a": list(_NEGATIVE_ATTRS)})
+        _negatives_path(args.campaign_id, args.group_id), params)
 
     if args.json:
         _output_json(negatives)
@@ -307,10 +319,10 @@ def cmd_fenix_negatives(args: argparse.Namespace) -> None:
         print(f"No negative keywords on {level}.")
         return
     print(f"Negative keywords on {level}: {len(negatives)}\n")
-    print(f"{'Keyword':<40} {'Match Type'}")
-    print("-" * 56)
+    print(f"{'Keyword':<40} {'Match Type':<16} Network")
+    print("-" * 66)
     for n in negatives:
-        print(f"{_s(n.get('name')):<40} {_s(n.get('matchType'))}")
+        print(f"{_s(n.get('name')):<40} {_s(n.get('matchType')):<16} {_s(n.get('network'), '-')}")
 
 
 # ---------------------------------------------------------------------------
@@ -388,7 +400,7 @@ def cmd_fenix_negative_add(args: argparse.Namespace) -> None:
     """Add a negative keyword at campaign level, or to one group."""
     path = _negatives_path(args.campaign_id, args.group_id)
     item = _negative_item(args)
-    body = {"negativeKeywords": [item]}
+    body = _negative_body(args, item)
     if args.dry_run:
         _local_dry_run(args, "POST", path, body)
         return
@@ -397,9 +409,11 @@ def cmd_fenix_negative_add(args: argparse.Namespace) -> None:
     level = "group" if args.group_id else "campaign"
     if args.json:
         _output_json({"added": 1, "level": level, "campaignId": args.campaign_id,
-                      "groupId": args.group_id, "negativeKeyword": item})
+                      "groupId": args.group_id, "network": body.get("network"),
+                      "negativeKeyword": item})
     else:
-        print(f"Negative keyword added ({level} level): "
+        print(f"Negative keyword added ({level} level"
+              f"{', network ' + body['network'] if body.get('network') else ''}): "
               f"{item['name']} [{item['matchType']}]")
 
 
@@ -409,7 +423,7 @@ def cmd_fenix_negative_remove(args: argparse.Namespace) -> None:
     # name + matchType, in the request body of a POST to `…/delete`.
     path = _negatives_path(args.campaign_id, args.group_id) + "delete"
     item = _negative_item(args)
-    body = {"negativeKeywords": [item]}
+    body = _negative_body(args, item)
     if args.dry_run:
         _local_dry_run(args, "POST", path, body)
         return
@@ -421,9 +435,11 @@ def cmd_fenix_negative_remove(args: argparse.Namespace) -> None:
     if args.json:
         _output_json({"removed": True, "level": level,
                       "campaignId": args.campaign_id, "groupId": args.group_id,
+                      "network": body.get("network") or "both",
                       "negativeKeyword": item})
     else:
-        print(f"Negative keyword removed ({level} level): "
+        print(f"Negative keyword removed ({level} level, "
+              f"{'network ' + body['network'] if body.get('network') else 'both networks'}): "
               f"{item['name']} [{item['matchType']}]")
 
 

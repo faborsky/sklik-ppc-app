@@ -61,7 +61,7 @@ from sklik.commands.banners import (
     cmd_banner_update, cmd_banner_restore,
 )
 from sklik.commands.placements import (
-    cmd_placements, cmd_placement_create, cmd_placement_remove,
+    cmd_placements, cmd_placement_stats, cmd_placement_create, cmd_placement_remove,
     cmd_placements_excluded, cmd_placement_exclude, cmd_placement_exclude_remove,
     cmd_placement_exclude_restore,
 )
@@ -922,6 +922,17 @@ def main() -> None:
     p.add_argument("--group-id", type=int, help="Filter by group ID")
     p.add_argument("--json", **json_kwargs)
 
+    # --- placement-stats ---
+    p = subparsers.add_parser("placement-stats",
+                              help="Placement statistics: cost, clicks, conversions per pattern")
+    p.add_argument("--campaign-id", type=int, help="Filter by campaign ID")
+    p.add_argument("--group-id", type=int, help="Filter by group ID")
+    p.add_argument("--date-from", help="Start date YYYY-MM-DD")
+    p.add_argument("--date-to", help="End date YYYY-MM-DD")
+    p.add_argument("--granularity", choices=STAT_GRANULARITIES, default="total",
+                   help="Split stats by period (default: total)")
+    p.add_argument("--json", **json_kwargs)
+
     # --- placement-create ---
     p = subparsers.add_parser("placement-create", help="Add placement (target website) to a display group")
     p.add_argument("--group-id", type=int, required=True, help="Group ID")
@@ -1177,6 +1188,8 @@ def main() -> None:
     p.add_argument("--campaign-id", type=int, required=True, help="Campaign ID")
     p.add_argument("--group-id", type=int,
                    help="Group ID (omit for the campaign-level negatives)")
+    p.add_argument("--network", choices=["fulltext", "context"],
+                   help="Only this network (fulltext = search, context = content); default both")
     p.add_argument("--json", **json_kwargs)
 
     p = subparsers.add_parser(
@@ -1234,6 +1247,8 @@ def main() -> None:
     p.add_argument("--match-type", default="negative", choices=fenix_match_choices,
                    help="Match type (default: negative = broad; negativeBroad is "
                         "accepted as its DRAK spelling)")
+    p.add_argument("--network", choices=["fulltext", "context"],
+                   help="Network to add to; omitted = server default by campaign type")
     p.add_argument("--dry-run", **local_dry_run_kwargs)
     p.add_argument("--json", **json_kwargs)
 
@@ -1246,6 +1261,8 @@ def main() -> None:
     p.add_argument("--name", required=True, help="Negative keyword text")
     p.add_argument("--match-type", required=True, choices=fenix_match_choices,
                    help="Match type of the keyword to delete (negative = broad)")
+    p.add_argument("--network", choices=["fulltext", "context"],
+                   help="Delete only from this network; omitted = from BOTH networks")
     p.add_argument("--confirm", action="store_true", help="Required for deletion")
     p.add_argument("--dry-run", **local_dry_run_kwargs)
     p.add_argument("--json", **json_kwargs)
@@ -1375,6 +1392,7 @@ def main() -> None:
         "banner-download": cmd_banner_download,
         "banner-remove": cmd_banner_remove,
         "placements": cmd_placements,
+        "placement-stats": cmd_placement_stats,
         "placement-create": cmd_placement_create,
         "placement-remove": cmd_placement_remove,
         "campaign-restore": cmd_campaign_restore,

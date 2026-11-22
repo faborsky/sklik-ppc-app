@@ -2,6 +2,18 @@
 
 Verze aplikace je v `sklik/__init__.py` (`__version__`, SemVer). Formát vychází z [Keep a Changelog](https://keepachangelog.com/). Datum je vydání dané verze.
 
+## [Nevydáno] — síť u vylučujících slov, statistiky sestavy, `placement-stats`, kontrola textu reklam
+
+Přispěl grunapavel-dev. Nálezy z práce na účtech (říjen a listopad 2026) a změny Fénixu 1.35.0-1.41.0.
+
+- **NOVÉ: `--network fulltext|context` u `fenix-negatives`, `fenix-negative-add` a `fenix-negative-remove`.** Fénix 1.40.0 (13. 11. 2026) přiřazuje každé vylučující slovo k síti. Výpis síť ukazuje. **Mazání bez `--network` maže z obou sítí.** Kampaň přijme jen síť svého typu: obsahová kampaň odmítne `fulltext` chybou `403 network_not_allowed_for_campaign_type` (ověřeno živě 22. 11.).
+- **OPRAVENO: `keyword-stats` a `ad-stats` s `--group-id` a `--granularity daily` padaly na `406`** („limit is 5000 and you are requiring 145000 data“). Limit platí pro entity × období. Report se teď počítá jen ze slov nebo reklam dané sestavy (restrikce `ids`, ověřeno živě: 24 slov sestavy místo ~15 000 v účtu) a stránka reportu se zmenšuje podle počtu období, což pomáhá všem statistikám s `--granularity`.
+- **NOVÉ: `placement-stats`**: náklady, prokliky, konverze a hodnota po umístěních z reportu `patterns` (`--campaign-id`, `--group-id`, `--granularity`). Report `patterns` nepřijímá `ishContext`/`ishSum`, seznam sloupců je ověřený živě.
+- **OPRAVENO: `ad-replace` hlásil `newAdId: null`, i když změna proběhla.** Když API změní jen URL, ID zůstane (ověřeno živě); výstup má teď `updatedInPlace: true` a `adId`.
+- **NOVÉ: `ad-create` a `ad-replace` si inzerát po zápisu přečtou** a upozorní, když API některý text zahodilo nebo změnilo (`droppedFields`, varování na stderr).
+- **OPRAVENO: `shop-items --product-detail` vypisoval `cpcToWin`.** Podle specifikace je to naše CPC na kartě produktu po modifikátoru pro desktop, ne CPC potřebná k výhře (na 30 položkách přesně `maxCpcSearch × 1,2` při modifikátoru +20 %). Sloupec se teď jmenuje `detailCpc`.
+- `docs/api-notes.md`: změny Fénixu 1.35.0-1.41.0 (mimo jiné `regions: null` maže geotargeting, update kampaně odmítá `null` u vybraných polí, token pro službu `sklik`).
+
 ## [1.13.0] — 2026-11-06 — SEM konverze přes Fénix (`sem-*`) a kombinace publik (`retargeting-combination*`)
 
 Obojí přispěl grunapavel-dev (PR #10 a #11, nabídka v issue #8).

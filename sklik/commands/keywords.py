@@ -12,7 +12,7 @@ from sklik.formatting import (
     _czk_to_halere, _halere_to_czk, _format_money, _format_share,
     _format_stat_date, _output_json, _convert_stats_to_czk,
 )
-from sklik.reports import _fetch_report, stat_columns
+from sklik.reports import _fetch_report, _group_entity_ids, stat_columns
 
 
 
@@ -158,12 +158,16 @@ def cmd_keyword_stats(args: argparse.Namespace) -> None:
     date_to = args.date_to or datetime.now().strftime("%Y-%m-%d")
 
     gran = getattr(args, "granularity", "total")
+    uid = getattr(args, "user_id", None)
     restriction: dict = {}
+    if args.group_id:
+        # Report only this group's keywords (the API ignores group filters).
+        ids = _group_entity_ids("keywords.list", "keywords", args.group_id, uid)
+        restriction["ids"] = ids
 
     cols = ["id", "name", "matchType", "group.id", "group.name", "campaign.id"] + stat_columns("keywords")
-    report = _fetch_report("keywords", restriction, date_from, date_to,
-                           cols, granularity=gran,
-                           user_id=getattr(args, "user_id", None))
+    report = [] if restriction.get("ids") == [] else _fetch_report(
+        "keywords", restriction, date_from, date_to, cols, granularity=gran, user_id=uid)
 
     # Client-side group/campaign filter
     if args.group_id:

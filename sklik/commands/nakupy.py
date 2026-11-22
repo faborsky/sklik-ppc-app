@@ -339,7 +339,7 @@ def cmd_shop_items(args: argparse.Namespace) -> None:
             if detail:
                 line += (f"  pos={detail.get('fromCheapestPosition', '—')} "
                          f"top={detail.get('topPosition', '—')} "
-                         f"cpcToWin={_czk(detail.get('maxCpc'))}")
+                         f"detailCpc={_czk(detail.get('maxCpc'))}")
             print(f"{line}  {(it.get('name') or '')[:40]}")
 
     # Never let a truncated list look complete — the v1.9.0 lesson, restated

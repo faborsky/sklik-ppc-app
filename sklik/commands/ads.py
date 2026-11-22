@@ -11,7 +11,7 @@ from sklik.formatting import (
     _halere_to_czk, _format_money, _format_share,
     _format_stat_date, _output_json, _convert_stats_to_czk,
 )
-from sklik.reports import _fetch_report, stat_columns
+from sklik.reports import _fetch_report, _group_entity_ids, stat_columns
 from sklik.images import _load_image_b64
 
 
@@ -103,13 +103,20 @@ def cmd_ad_create(args: argparse.Namespace) -> None:
     if args.path2:
         ad["path2"] = args.path2
 
-    data = _api_call("ads.create", [[ad]], getattr(args, "user_id", None))
+    uid = getattr(args, "user_id", None)
+    data = _api_call("ads.create", [[ad]], uid)
     ad_ids = data.get("adIds", [])
+    dropped = _dropped_fields(ad, _read_back_ad(ad_ids[0], uid)) if ad_ids else []
 
     if args.json:
-        _output_json({"adIds": ad_ids})
+        out: dict = {"adIds": ad_ids}
+        if dropped:
+            out["droppedFields"] = dropped
+        _output_json(out)
     else:
         print(f"Ad created: ID {ad_ids[0] if ad_ids else '?'}")
+    if ad_ids:
+        _warn_dropped(ad_ids[0], dropped)
 
 
 def cmd_combined_create(args: argparse.Namespace) -> None:
@@ -262,18 +269,66 @@ def cmd_ad_replace(args: argparse.Namespace) -> None:
     result = _api_call("ads.update", [[update_struct]], user_id)
     new_ids = result.get("newAdIds", [])
 
+    # Without newAdIds the API changed the ad IN PLACE (same ID) — seen live
+    # 2026-11-19. Read the live ad back either way: it tells the in-place case
+    # from a no-op and catches fields the API silently dropped.
+    live_id = new_ids[0] if new_ids else args.ad_id
+    live = _read_back_ad(live_id, user_id)
+    dropped = _dropped_fields(creative, live)
+    in_place = not new_ids and live is not None and not dropped
+
     if args.json:
-        _output_json({
+        out: dict = {
             "replaced": True,
             "oldAdId": args.ad_id,
             "newAdIds": new_ids,
             "newAdId": new_ids[0] if new_ids else None,
-        })
+            "updatedInPlace": in_place,
+            "adId": live_id,
+        }
+        if dropped:
+            out["droppedFields"] = dropped
+        _output_json(out)
     else:
         if new_ids:
             print(f"Ad {args.ad_id} replaced → new ID: {new_ids[0]} (original preserved on any failure).")
+        elif in_place:
+            print(f"Ad {args.ad_id} updated in place (same ID, new text is live).")
         else:
-            print(f"Ad {args.ad_id} updated (no new ID returned).")
+            print(f"Ad {args.ad_id} updated (no new ID returned; read-back did not confirm the text).")
+    _warn_dropped(live_id, dropped)
+
+
+_ETA_TEXT_FIELDS = ("headline1", "headline2", "headline3", "description",
+                    "description2", "finalUrl", "path1", "path2")
+
+
+def _read_back_ad(ad_id: int, user_id: int | None) -> dict | None:
+    """The live ETA creative of one ad (one single-row lookup), or None."""
+    data = _api_call("ads.list", [{"ids": [ad_id]},
+                                  {"limit": 1, "offset": 0,
+                                   "displayColumns": ["id", *_ETA_TEXT_FIELDS]}],
+                     user_id, _soft=True)
+    ads = data.get("ads") or []
+    return ads[0] if ads else None
+
+
+def _dropped_fields(sent: dict, live: dict | None) -> list[str]:
+    """Text fields that were sent non-empty but are not on the live ad.
+
+    Seen once (2026-10-15): headline3/description2 sent on an ETA ad and gone
+    afterwards, so a preview showed longer texts than what runs."""
+    if live is None:
+        return []
+    return [f for f in _ETA_TEXT_FIELDS
+            if sent.get(f) and (live.get(f) or "") != sent.get(f)]
+
+
+def _warn_dropped(ad_id: int, dropped: list[str]) -> None:
+    if dropped:
+        print(f"WARNING: ad {ad_id} does not carry what was sent for: {', '.join(dropped)} "
+              f"— the API dropped or changed it. Check the ad before relying on these texts.",
+              file=sys.stderr)
 
 
 def cmd_ad_remove(args: argparse.Namespace) -> None:
@@ -295,12 +350,15 @@ def cmd_ad_stats(args: argparse.Namespace) -> None:
     date_to = args.date_to or datetime.now().strftime("%Y-%m-%d")
 
     gran = getattr(args, "granularity", "total")
+    uid = getattr(args, "user_id", None)
     restriction: dict = {}
+    if args.group_id:
+        # Report only this group's ads (the API ignores group filters).
+        restriction["ids"] = _group_entity_ids("ads.list", "ads", args.group_id, uid)
 
     cols = ["id", "adType", "headline1", "headline2", "status", "group.id"] + stat_columns("ads")
-    report = _fetch_report("ads", restriction, date_from, date_to,
-                           cols, granularity=gran,
-                           user_id=getattr(args, "user_id", None))
+    report = [] if restriction.get("ids") == [] else _fetch_report(
+        "ads", restriction, date_from, date_to, cols, granularity=gran, user_id=uid)
 
     # Client-side group filter
     if args.group_id:

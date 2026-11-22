@@ -8,10 +8,10 @@ from datetime import datetime, timedelta
 
 from sklik.api import _api_call, _fail, _fail_msg, _is_sem_blocked
 from sklik.formatting import (
-    _czk_to_halere, _halere_to_czk, _format_money,
-    _output_json, _convert_stats_to_czk,
+    _czk_to_halere, _halere_to_czk, _format_money, _format_share,
+    _format_stat_date, _output_json, _convert_stats_to_czk,
 )
-from sklik.reports import _fetch_report, _fetch_listing_report, STAT_COLUMNS
+from sklik.reports import _fetch_report, _fetch_listing_report, STAT_COLUMNS, stat_columns
 
 
 
@@ -55,6 +55,51 @@ def cmd_placements(args: argparse.Namespace) -> None:
             g_name = r.get("group", {}).get("name", "") if isinstance(r.get("group"), dict) else r.get("group.name", "")
             print(f"{r.get('id', ''):<12} {(r.get('pattern') or ''):<35} "
                   f"{(r.get('status') or ''):<10} {g_name}")
+
+
+def _group_of(r: dict, key: str):
+    g = r.get("group")
+    return g.get(key) if isinstance(g, dict) else r.get(f"group.{key}")
+
+
+def cmd_placement_stats(args: argparse.Namespace) -> None:
+    """Statistics per placement pattern (cost, clicks, conversions …).
+
+    `placements` lists the patterns only; the same `patterns` report carries
+    the stat columns too (whitelist in reports._ENTITY_STAT_COLUMNS)."""
+    date_from = args.date_from or (datetime.now() - timedelta(days=30)).strftime("%Y-%m-%d")
+    date_to = args.date_to or datetime.now().strftime("%Y-%m-%d")
+    gran = getattr(args, "granularity", "total")
+    cols = ["id", "pattern", "status", "cpc", "group.id", "group.name",
+            "campaign.id", "campaign.name"] + stat_columns("patterns")
+    report = _fetch_report("patterns", {}, date_from, date_to, cols, granularity=gran,
+                           user_id=getattr(args, "user_id", None))
+    if args.group_id:
+        report = [r for r in report if _group_of(r, "id") == args.group_id]
+    if args.campaign_id:
+        report = [r for r in report
+                  if (r.get("campaign", {}).get("id") if isinstance(r.get("campaign"), dict)
+                      else r.get("campaign.id")) == args.campaign_id]
+
+    if args.json:
+        for r in report:
+            if "cpc" in r:
+                r["cpc"] = _halere_to_czk(r.get("cpc"))
+            if "stats" in r:
+                r["stats"] = _convert_stats_to_czk(r["stats"])
+        _output_json(report)
+        return
+    if not report:
+        print("No placement data.")
+        return
+    print(f"Placement stats ({date_from} — {date_to}):\n")
+    for r in report:
+        print(f"  {r.get('pattern', '')} (ID: {r.get('id')}, group: {_group_of(r, 'name') or ''})")
+        for s in r.get("stats", []):
+            print(f"    {_format_stat_date(s, gran)}"
+                  f"Clicks: {s.get('clicks', 0)}  Impr: {s.get('impressions', 0)}  "
+                  f"CTR: {_format_share(s.get('ctr'))}  Cost: {_format_money(s.get('totalMoney'))}  "
+                  f"Conv: {s.get('conversions', 0)}  Value: {s.get('conversionValue') or 0} Kč")
 
 
 def cmd_placement_create(args: argparse.Namespace) -> None:
