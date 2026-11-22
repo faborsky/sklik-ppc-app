@@ -235,7 +235,7 @@ Souhrn celého účtu **jedním voláním**, místo řetězení `account` + `cam
 | `keyword-create-batch` | `--group-id`, `--keywords-json`, `--json` |
 | `keyword-update` | `--keyword-id`, `--cpc`, `--status`, `--url`, `--json` |
 | `keyword-remove` | `--keyword-id`, `--confirm`, `--json` |
-| `keyword-stats` | `--group-id`, `--campaign-id`, `--date-from`, `--date-to`, `--granularity …`, `--json` |
+| `keyword-stats` | `--group-id`, `--campaign-id`, `--date-from`, `--date-to`, `--granularity …`, `--json`. S `--group-id` se report počítá jen ze slov dané sestavy, takže i denní rozpad na velkém účtu nespadne na limitu 5000 |
 | `keyword-restore` | `--keyword-id`, `--json`. Obnoví smazané slovo (undelete) |
 | `keyword-set` | `--group-id`, `--keywords-json`, `--remove-others`, `--json`. Deklarativní nastavení slov sestavy |
 
@@ -247,11 +247,11 @@ Souhrn celého účtu **jedním voláním**, místo řetězení `account` + `cam
 | Příkaz | Klíčové přepínače |
 |--------|-------------------|
 | `ads` | `--group-id`, `--campaign-id`, `--json` |
-| `ad-create` | `--group-id`, `--headline1/2/3`, `--description1/2` (alias `--description`), `--final-url`, `--path1/2`, `--json` |
+| `ad-create` | `--group-id`, `--headline1/2/3`, `--description1/2` (alias `--description`), `--final-url`, `--path1/2`, `--json`. Po založení si inzerát přečte a upozorní, když API některý text zahodilo (`droppedFields`) |
 | `ad-update` | `--ad-id`, `--status`, `--json` (jen stav, na místě) |
-| `ad-replace` | `--ad-id`, `--headline1/2/3`, `--description/--description2`, `--final-url`, `--path1/2`, `--json` |
+| `ad-replace` | `--ad-id`, `--headline1/2/3`, `--description/--description2`, `--final-url`, `--path1/2`, `--json`. Když API změnu provede a ID nechá (např. jen změna URL), vrátí `updatedInPlace: true` (dřív jen `newAdId: null`); hlídá i zahozené texty (`droppedFields`) |
 | `ad-remove` | `--ad-id`, `--confirm`, `--json` |
-| `ad-stats` | `--group-id`, `--date-from`, `--date-to`, `--granularity …`, `--json` |
+| `ad-stats` | `--group-id`, `--date-from`, `--date-to`, `--granularity …`, `--json`. S `--group-id` se report počítá jen z reklam dané sestavy |
 | `ad-restore` | `--ad-id`, `--json`. Obnoví smazaný inzerát (undelete) |
 
 > **Změna textu inzerátu = `ad-replace`, NIKDY ruční `ad-remove` + `ad-create`.** Sklik neumí text upravit na místě: jakákoli změna kreativy udělá přes `ads.update` **atomickou výměnu na serveru** (smaže starý + vytvoří nový v JEDNÉ operaci, vrátí `newAdIds`). Když nový inzerát neprojde validací (typicky `ad_duplicate_in_db`), **původní zůstane nedotčený**. Ruční remove+create tuhle jistotu nemá. Když selže create po removu, sestava tiše ztratí inzerát (reálně se to stalo). `ad-replace` načte stávající inzerát, aplikuje jen zadaná pole (zbytek zachová), předvaliduje přes `ads.check` a pak provede atomickou výměnu. Jen textové (eta) inzeráty.
@@ -414,6 +414,7 @@ Cílení obsahových sestav na konkrétní weby (v Skliku „umístění“). Vz
 | Příkaz | Klíčové přepínače |
 |--------|-------------------|
 | `placements` | `--group-id`, `--json` |
+| `placement-stats` | `--campaign-id`, `--group-id`, `--date-from`, `--date-to`, `--granularity …`, `--json`. Náklady, prokliky, konverze a hodnota po umístěních (report `patterns`) |
 | `placement-create` | `--group-id`, `--pattern "forbes.cz"`, `--cpc` (CZK, volitelně přebije CPC sestavy), `--status`, `--json` |
 | `placement-remove` | `--pattern-id`, `--confirm`, `--json` |
 | `placements-excluded` | `--group-id`, `--json`. Výpis vyloučených webů |
@@ -471,7 +472,7 @@ Seznam Nákupy (dřív Zboží.cz): feed, diagnostika položek, modifikátory na
 | `feed-diagnostics` | `--premise-id`, `--json`. Zdraví nabídek: OK / chyba / neviditelné / „lze vylepšit“ / bez kategorie |
 | `nakupy-campaigns` | `--premise-id`, `--json`. Nákupní kampaně + modifikátory nabídek (web / zařízení / typ aukce) |
 | `nakupy-stats` | `--date-from`, `--date-to`, `--split "webType,deviceType,productType,conversionId"`, `--by-category`, `--granularity`, `--premise-id`, `--json` |
-| `shop-items` | `--premise-id`, `--all`, `--limit`, `--unpaired`/`--paired`, `--item-id "A,B"`, `--product-detail` (pozice v aukci + potřebná CPC), `--search-info`, `--json` |
+| `shop-items` | `--premise-id`, `--all`, `--limit`, `--unpaired`/`--paired`, `--item-id "A,B"`, `--product-detail` (pozice v aukci + `detailCpc` = naše CPC na kartě produktu po modifikátoru pro desktop, ne CPC potřebná k výhře), `--search-info`, `--json` |
 
 **Dvě konvence se tu liší od zbytku appky:**
 
@@ -497,12 +498,12 @@ Token potřebuje úroveň přístupu **`rw`** pro zápis (volí se při generov�
 | `fenix-campaigns` | `--status active\|suspend`, `--json` |
 | `fenix-groups` | `--campaign-id`, `--json` |
 | `fenix-ads` | `--campaign-id`, `--group-id`, `--json` |
-| `fenix-negatives` | `--campaign-id`, `--group-id` (bez něj = úroveň kampaně), `--json` |
+| `fenix-negatives` | `--campaign-id`, `--group-id` (bez něj = úroveň kampaně), `--network fulltext\|context`, `--json`. Výpis ukazuje i síť |
 | `fenix-campaign-create` | `--name`, `--day-budget` (Kč), `--type fulltext\|context\|product`, `--status` (výchozí `suspend`), `--ad-selection`, `--dry-run`, `--json` |
 | `fenix-group-create` | `--campaign-id`, `--name`, `--cpc` nebo `--cpm` (Kč), `--status`, `--dry-run`, `--json` |
 | `fenix-ad-create` | `--campaign-id`, `--group-id`, `--headline1`, `--headline2`, `--headline3`, `--description1` (alias `--description`), `--description2`, `--final-url`, `--path1`, `--path2`, `--mobile-final-url`, `--tracking-template`, `--dry-run`, `--json`. Inzerát vzniká vždy aktivní, `status` API při zakládání odmítá |
-| `fenix-negative-add` | `--campaign-id`, `--group-id`, `--name`, `--match-type negative\|negativePhrase\|negativeExact`, `--dry-run`, `--json` |
-| `fenix-negative-remove` | `--campaign-id`, `--group-id`, `--name`, `--match-type` (povinný), `--confirm`, `--dry-run`, `--json` |
+| `fenix-negative-add` | `--campaign-id`, `--group-id`, `--name`, `--match-type negative\|negativePhrase\|negativeExact`, `--network fulltext\|context` (bez něj síť podle typu kampaně), `--dry-run`, `--json` |
+| `fenix-negative-remove` | `--campaign-id`, `--group-id`, `--name`, `--match-type` (povinný), `--network` (bez něj z **obou** sítí), `--confirm`, `--dry-run`, `--json` |
 | `fenix-campaign-update` | `--campaign-id`, `--type` (bez něj se dohledá), `--name`, `--status`, `--day-budget` (Kč), `--total-budget` (Kč, `none` = bez limitu), `--start-date`, `--end-date` (`YYYY-MM-DD`, `none` datum smaže), `--capping-max`, `--capping-period daily\|weekly\|monthly\|whole`, `--capping-min-delay`, `--capping-min-delay-period minute\|hour` (hodnota a období vždy spolu), `--no-capping`, `--excluded-urls URL …` (nahradí celý seznam), `--no-excluded-urls`, `--dry-run`, `--json` |
 | `fenix-ad-update` | `--campaign-id`, `--group-id`, `--ad-id ID …` (víc reklam jedné sestavy), `--type` (bez něj se dohledá), `--status`, `--start-date`, `--end-date` (`YYYY-MM-DD`, `none` smaže), `--name` (jen banner a branding), `--dry-run`, `--json`. Funguje pro všechny typy reklam včetně bannerů |
 
