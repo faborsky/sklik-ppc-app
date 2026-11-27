@@ -737,6 +737,8 @@ def main() -> None:
 
     # --- retargeting ---
     p = subparsers.add_parser("retargeting", help="List retargeting (audience) lists")
+    p.add_argument("--detail", action="store_true",
+                   help="Add audience size (users), membership days and URL conditions")
     p.add_argument("--json", **json_kwargs)
 
     # --- retargeting-create ---

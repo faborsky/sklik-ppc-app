@@ -25,27 +25,58 @@ from sklik.reports import _fetch_report, STAT_COLUMNS
 # editable fields under `attributes`.
 
 def cmd_retargeting(args: argparse.Namespace) -> None:
-    """List retargeting (audience) lists."""
+    """List retargeting (audience) lists; --detail adds size, membership and conditions."""
+    uid = getattr(args, "user_id", None)
     # retargeting.lists.list takes only the user struct.
-    data = _api_call("retargeting.lists.list", [], getattr(args, "user_id", None))
+    data = _api_call("retargeting.lists.list", [], uid)
     lists = data.get("lists", [])
+    out = [{
+        "listId": lst.get("listId"),
+        "name": lst.get("name"),
+        "status": lst.get("status"),
+        "deleted": lst.get("deleted"),
+    } for lst in lists]
+
+    # Audience size lives only in retargeting.lists.get (attributes.users). DRTG
+    # product-visitor lists and SEM conversion lists are not returned by either method.
+    if getattr(args, "detail", False) and out:
+        details: dict = {}
+        ids = [r["listId"] for r in out]
+        for i in range(0, len(ids), 100):
+            got = _api_call("retargeting.lists.get", [ids[i:i + 100]], uid)
+            for lst in got.get("lists", []):
+                details[lst.get("listId")] = lst
+        for r in out:
+            d = details.get(r["listId"], {})
+            attrs = d.get("attributes") or {}
+            r["users"] = attrs.get("users")
+            r["membership"] = attrs.get("membership")
+            r["takeAllUsers"] = attrs.get("takeAllUsers")
+            r["conditionGroups"] = [[{"type": c.get("type"), "value": c.get("value")}
+                                     for c in g.get("conditions", [])]
+                                    for g in d.get("conditionGroups", [])]
 
     if args.json:
-        out = [{
-            "listId": lst.get("listId"),
-            "name": lst.get("name"),
-            "status": lst.get("status"),
-            "deleted": lst.get("deleted"),
-        } for lst in lists]
         _output_json(out)
-    else:
-        if not lists:
-            print("No retargeting lists found.")
-            return
-        print(f"{'List ID':<12} {'Name':<40} {'Status'}")
-        print("-" * 65)
-        for lst in lists:
-            print(f"{lst.get('listId', ''):<12} {lst.get('name', ''):<40} {lst.get('status', '')}")
+        return
+    if not out:
+        print("No retargeting lists found.")
+        return
+    if getattr(args, "detail", False):
+        print(f"{'List ID':<12} {'Name':<40} {'Status':<8} {'Days':>5} {'Users':>9}  Conditions")
+        print("-" * 120)
+        for r in out:
+            cond = "all visitors" if r.get("takeAllUsers") else " AND ".join(
+                "(" + " OR ".join(f"{c['type']} {c['value']}" for c in g) + ")"
+                for g in r.get("conditionGroups", []))
+            users = r.get("users") if r.get("users") is not None else "?"
+            print(f"{r['listId'] or '':<12} {(r['name'] or '')[:39]:<40} {r['status'] or '':<8} "
+                  f"{r.get('membership') or '':>5} {users:>9}  {cond[:60]}")
+        return
+    print(f"{'List ID':<12} {'Name':<40} {'Status'}")
+    print("-" * 65)
+    for r in out:
+        print(f"{r['listId'] or '':<12} {r['name'] or '':<40} {r['status'] or ''}")
 
 
 def cmd_retargeting_create(args: argparse.Namespace) -> None:

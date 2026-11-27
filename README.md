@@ -360,7 +360,7 @@ Konverze = pojmenovaná definice cílové akce (nákup, registrace…) a její h
 
 | Příkaz | Klíčové přepínače |
 |--------|-------------------|
-| `retargeting` | `--json` |
+| `retargeting` | `--detail` (velikost publika, délka členství, podmínky URL), `--json` |
 | `retargeting-create` | `--name`, `--membership` (dny), `--description`, `--use-historic`, `--take-all-users`, `--conditions-json` (tvar: `[{"conditions":[{"type":"contains","value":"/dekujeme"}]}]`), `--json` |
 | `retargeting-update` | `--list-id`, `--name`, `--membership`, `--description`, `--json` |
 | `retargeting-remove` | `--list-id`, `--confirm`, `--json` |
@@ -370,6 +370,8 @@ Konverze = pojmenovaná definice cílové akce (nákup, registrace…) a její h
 | `retargeting-exclude` | `--list-id`, `--campaign-id` **nebo** `--group-id`, `--json`. Vyloučí publikum (negativní retargeting) |
 | `retargeting-exclude-remove` | `--list-id`, `--campaign-id`/`--group-id`, `--confirm`, `--json` |
 | `retargeting-excluded` | `--campaign-id`/`--group-id` (bez nich vše na obou úrovních), `--json` |
+
+> Velikost publika (`--detail`) API vrací jen u běžných seznamů. DRTG seznamy návštěvníků produktů a seznamy z SEM konverzí v API vůbec nejsou, ty ukáže jen webový Sklik.
 
 > Publikum jde napojit jen na sestavy **obsahových** kampaní. Pokus o napojení **smazaného** seznamu vrací `406 Bad values` bez bližší diagnostiky, zkontroluj `deleted` ve výpisu `retargeting --json`.
 > **Vyloučení publika** (`retargeting-exclude`) funguje na úrovni kampaně i sestavy, typicky „vyluč stávající zákazníky z akviziční kampaně“. Na rozdíl od napojení funguje i na search kampaních.
