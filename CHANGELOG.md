@@ -2,6 +2,12 @@
 
 Verze aplikace je v `sklik/__init__.py` (`__version__`, SemVer). Formát vychází z [Keep a Changelog](https://keepachangelog.com/). Datum je vydání dané verze.
 
+## [Nevydáno] — `retargeting --detail`: velikost publik
+
+Přispěl grunapavel-dev.
+
+- **NOVÉ: `retargeting --detail`** doplní k seznamům velikost publika (`users`), délku členství a podmínky URL přes `retargeting.lists.get` (po 100 ID). `retargeting.lists.list` velikost nevrací. DRTG seznamy návštěvníků produktů a seznamy z SEM konverzí API nevrací vůbec, jejich velikost ukáže jen webový Sklik.
+
 ## [1.13.0] — 2026-11-06 — SEM konverze přes Fénix (`sem-*`) a kombinace publik (`retargeting-combination*`)
 
 Obojí přispěl grunapavel-dev (PR #10 a #11, nabídka v issue #8).
