@@ -40,6 +40,9 @@ from sklik.commands.conversions import (
     cmd_conversions, cmd_conversion_types, cmd_conversion_create,
     cmd_conversion_update, cmd_conversion_remove,
 )
+from sklik.commands.campaign_negatives import (
+    cmd_negatives_campaign, cmd_negative_campaign_add, cmd_negative_campaign_remove,
+)
 from sklik.commands.sem import (
     SEM_EVENTS,
     cmd_sem_status, cmd_sem_conversions, cmd_sem_conversion_create,
@@ -165,6 +168,7 @@ _FENIX_COMMANDS = frozenset({
     "fenix-campaign-update", "fenix-ad-update",
     "sem-status", "sem-conversions", "sem-conversion-create",
     "sem-conversion-update", "sem-conversion-remove",
+    "negatives-campaign", "negative-campaign-add", "negative-campaign-remove",
 })
 
 
@@ -687,6 +691,39 @@ def main() -> None:
     p = subparsers.add_parser("conversion-remove", help="Remove conversion definition")
     p.add_argument("--conversion-id", type=int, required=True, help="Conversion ID")
     p.add_argument("--confirm", action="store_true", help="Required for deletion")
+    p.add_argument("--json", **json_kwargs)
+
+    # --- campaign-level negatives in batches (API Fénix) ---
+    p = subparsers.add_parser(
+        "negatives-campaign", help="List campaign-level negative keywords (DRAK can't) [Fénix]")
+    p.add_argument("--campaign-id", type=int, required=True, help="Campaign ID")
+    p.add_argument("--network", choices=["fulltext", "context"],
+                   help="Only this network (fulltext = search, context = content); default both")
+    p.add_argument("--json", **json_kwargs)
+
+    p = subparsers.add_parser(
+        "negative-campaign-add",
+        help="Append campaign-level negatives — existing ones stay, duplicates skipped [Fénix]")
+    p.add_argument("--campaign-id", type=int, required=True, help="Campaign ID")
+    p.add_argument("--name", help="Negative keyword text")
+    p.add_argument("--match-type", choices=["negativeBroad", "negativePhrase", "negativeExact"],
+                   default="negativePhrase", help="Match type (default negativePhrase)")
+    p.add_argument("--keywords-json", help='Several: [{"name":"kw","matchType":"negativePhrase"}, …]')
+    p.add_argument("--network", choices=["fulltext", "context"],
+                   help="Network to add to (fulltext = search, context = content); "
+                        "omitted = server default by campaign type")
+    p.add_argument("--json", **json_kwargs)
+
+    p = subparsers.add_parser(
+        "negative-campaign-remove", help="Remove given campaign-level negatives [Fénix]")
+    p.add_argument("--campaign-id", type=int, required=True, help="Campaign ID")
+    p.add_argument("--name", help="Negative keyword text")
+    p.add_argument("--match-type", choices=["negativeBroad", "negativePhrase", "negativeExact"],
+                   help="Match type of --name (or default for --keywords-json items)")
+    p.add_argument("--keywords-json", help='Several: [{"name":"kw","matchType":"negativePhrase"}, …]')
+    p.add_argument("--network", choices=["fulltext", "context"],
+                   help="Remove only from this network; omitted = from BOTH networks")
+    p.add_argument("--confirm", action="store_true", help="Required for removal")
     p.add_argument("--json", **json_kwargs)
 
     # --- SEM (API Fénix; needs SKLIK_FENIX_REFRESH_TOKEN[_NAME] in .env) ---
@@ -1440,6 +1477,9 @@ def main() -> None:
         "fenix-ad-create": cmd_fenix_ad_create,
         "fenix-negative-add": cmd_fenix_negative_add,
         "fenix-negative-remove": cmd_fenix_negative_remove,
+        "negatives-campaign": cmd_negatives_campaign,
+        "negative-campaign-add": cmd_negative_campaign_add,
+        "negative-campaign-remove": cmd_negative_campaign_remove,
         "fenix-campaign-update": cmd_fenix_campaign_update,
         "fenix-ad-update": cmd_fenix_ad_update,
     }

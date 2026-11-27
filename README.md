@@ -333,6 +333,16 @@ Konverze = pojmenovaná definice cílové akce (nákup, registrace…) a její h
 
 > **Pozn.:** Účty se zapnutým **SEM** (Seznam Event Measurement) `conversions.*` metody používat nemohou, CLI v takovém případě vypíše srozumitelnou hlášku. Metoda `listConversionTypes` je na straně Sklika nefunkční (HTTP 500), proto `conversion-types` odvozuje typy z existujících konverzí. SEM konverze spravují příkazy [`sem-*`](#sem--měření-událostí-api-fénix) níže.
 
+### Negativa na úrovni kampaně (API Fénix)
+
+Drak umí negativa na kampani jen zapsat, ne přečíst, a není jasné, jestli zápis přidává, nebo přepisuje. Fénix má výpis i oddělené přidání a mazání.
+
+| Příkaz | Klíčové přepínače |
+|--------|-------------------|
+| `negatives-campaign` | `--campaign-id`, `--network fulltext\|context`, `--json`. Ukazuje i síť (vyhledávání = `fulltext`, obsah = `context`) |
+| `negative-campaign-add` | `--campaign-id`, `--name` + `--match-type` (výchozí negativePhrase) nebo `--keywords-json`, `--network`, `--json` — **přidá**, stávající zůstanou, duplicity přeskočí (s `--network` podle sítě; bez něj upozorní na slova, která jsou jen v jedné síti) |
+| `negative-campaign-remove` | `--campaign-id`, `--name` + `--match-type` nebo `--keywords-json`, `--network` (bez něj z **obou** sítí), `--confirm`, `--json` — nenalezená vypíše |
+
 ### SEM — měření událostí (API Fénix)
 
 Účty se zapnutým **SEM** (Seznam Event Measurement) nemohou přes DRAK používat konverze (`conversions.*`). Tyhle příkazy proto jdou přes **API Fénix**. Konverze v SEM stojí na události (`Purchase`, `AddToCart`, `InitiateCheckout`, `Lead`…) a může mít podmínky na její rozměry: hodnotu, URL, kategorii, ID produktu… **Založením konverze vznikne i retargetingový seznam**. Tak se dělají publika typu „nákup nad 1 500 Kč“, která běžné URL seznamy z DRAKu neumí.
