@@ -71,6 +71,7 @@ from sklik.commands.display_targeting import (
 )
 from sklik.commands.budgets import (
     cmd_budgets, cmd_budget_create, cmd_budget_update, cmd_budget_remove,
+    cmd_budget_check,
 )
 from sklik.commands.nakupy import (
     cmd_feed_status, cmd_feed_diagnostics, cmd_nakupy_campaigns,
@@ -1043,6 +1044,20 @@ def main() -> None:
                    help="Unassign ALL campaigns (excludes the add/remove flags)")
     p.add_argument("--json", **json_kwargs)
 
+    p = subparsers.add_parser(
+        "budget-check",
+        help="Flag campaigns whose daily spend keeps hitting the daily budget (spend vs budget, not API flags)")
+    p.add_argument("--days", type=int, default=7, help="Window length in days (default 7, ends yesterday)")
+    p.add_argument("--threshold", type=float, default=90,
+                   help="Spend as %% of the daily budget that counts as 'at cap' (default 90)")
+    p.add_argument("--min-days", type=int, default=2,
+                   help="Days at cap needed to flag the budget as limiting (default 2)")
+    p.add_argument("--include-today", action="store_true",
+                   help="Count today too (partial day, usually under-spent)")
+    p.add_argument("--all", action="store_true",
+                   help="List every active budget, not only the limited ones")
+    p.add_argument("--json", **json_kwargs)
+
     p = subparsers.add_parser("budget-remove", help="Remove shared budget")
     p.add_argument("--budget-id", type=int, required=True, help="Shared budget ID")
     p.add_argument("--confirm", action="store_true", help="Required for deletion")
@@ -1419,6 +1434,7 @@ def main() -> None:
         "budget-create": cmd_budget_create,
         "budget-update": cmd_budget_update,
         "budget-remove": cmd_budget_remove,
+        "budget-check": cmd_budget_check,
         "credit": cmd_credit,
         "regions": cmd_regions,
         "autotagging": cmd_autotagging,

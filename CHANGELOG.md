@@ -2,6 +2,12 @@
 
 Verze aplikace je v `sklik/__init__.py` (`__version__`, SemVer). Formát vychází z [Keep a Changelog](https://keepachangelog.com/). Datum je vydání dané verze.
 
+## [Nevydáno] — `budget-check`: kampaně omezené denním rozpočtem
+
+Přispěl grunapavel-dev.
+
+- **NOVÉ: `budget-check`** najde kampaně omezené denním rozpočtem z výdeje proti rozpočtu: výdej ≥ `--threshold` % rozpočtu (výchozí 90) aspoň `--min-days` dní (2) z posledních `--days` (7, okno končí včerejškem). Webový Sklik ukazuje štítek „Nízký rozpočet“, API ho nevrací a `exhaustedBudgetShare` / `missImpressions` můžou u kampaní na stropu hlásit 0 (ověřeno živě). Kampaně se sdíleným rozpočtem se sčítají. Den nad 130 % rozpočtu značí, že se rozpočet v okně měnil (API nezná jeho historii).
+
 ## [1.13.0] — 2026-11-06 — SEM konverze přes Fénix (`sem-*`) a kombinace publik (`retargeting-combination*`)
 
 Obojí přispěl grunapavel-dev (PR #10 a #11, nabídka v issue #8).

@@ -456,6 +456,7 @@ Jeden denní rozpočet sdílený více kampaněmi. Přiřazení kampaní se ří
 | `budget-create` | `--name`, `--day-budget` (Kč), `--campaign-ids "1,2"`, `--json` |
 | `budget-update` | `--budget-id`, `--name`, `--day-budget`, `--add-campaign-ids`, `--remove-campaign-ids`, `--remove-all-campaigns`, `--json` |
 | `budget-remove` | `--budget-id`, `--confirm`, `--json` |
+| `budget-check` | `--days` (7, končí včerejškem), `--threshold` (90 % rozpočtu), `--min-days` (2), `--include-today`, `--all`, `--json`. Najde kampaně omezené denním rozpočtem **z výdeje proti rozpočtu** — web UI má štítek „Nízký rozpočet“, API ho nevrací a `exhaustedBudgetShare`/`missImpressions` můžou hlásit 0 i u kampaní na stropu. Kampaně se sdíleným rozpočtem sčítá. Porovnává se aktuální rozpočet; změněný rozpočet je vidět jako dny nad 130 % |
 
 ### Nákupy / feed (API Fénix)
 
