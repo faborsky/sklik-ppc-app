@@ -462,10 +462,15 @@ def _put_dates(body: dict, args: argparse.Namespace) -> None:
 
 def _campaign_type(campaign_id: int) -> str:
     """The PATCH body needs the campaign's `type` (it selects the schema and
-    cannot be changed), so look it up. The spec names the filter `id`; the
-    live API validates `ids` as a list and filters by it (2026-10-22)."""
+    cannot be changed), so look it up through the spec's `id` filter.
+
+    *(live 2026-11-27)* a single `ids=<id>` is rejected with 422 ("query.ids:
+    Input should be a valid list" — the server reads one repeated value as a
+    scalar), while `id=<id>` filters to that campaign (and to nothing for an
+    unknown ID). The loop below still checks the ID, in case the filter is
+    ever ignored."""
     data = fenix.call("GET", "/sklik/campaigns/",
-                      {"ids": [campaign_id], "a": ["id", "type"]})
+                      {"id": campaign_id, "a": ["id", "type"]})
     for c in data.get("items") or []:
         if c.get("id") == campaign_id and c.get("type"):
             return c["type"]
