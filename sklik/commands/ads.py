@@ -154,17 +154,36 @@ def cmd_combined_create(args: argparse.Namespace) -> None:
         print(f"Combined ad created: ID {ad_ids[0] if ad_ids else '?'}")
 
 
-def cmd_ad_update(args: argparse.Namespace) -> None:
-    """Update an ad."""
-    update: dict = {"id": args.ad_id}
-    if args.status:
-        update["status"] = args.status
+# ads.list reports adType in snake_case, ads.update expects camelCase.
+_AD_TYPE_FOR_UPDATE = {"dynamic_banner": "dynamicBanner"}
 
-    if len(update) == 1:
+
+def cmd_ad_update(args: argparse.Namespace) -> None:
+    """Update an ad's status.
+
+    ads.update needs the ad's adType next to the status — without it combined
+    (native) ads fail with 406 not_allowed_for_campaign_type. So the type is
+    looked up first. Image banners are rejected by ads.update whatever you send;
+    they switch on/off through banner-update.
+    """
+    if not args.status:
         print("ERROR: No fields to update.", file=sys.stderr)
         sys.exit(1)
+    user_id = getattr(args, "user_id", None)
 
-    data = _api_call("ads.update", [[update]], getattr(args, "user_id", None))
+    data = _api_call("ads.list", [{"ids": [args.ad_id], "isDeleted": False},
+                                  {"limit": 1, "offset": 0, "displayColumns": ["id", "adType"]}], user_id)
+    ads = data.get("ads", [])
+    if not ads:
+        _fail_msg(f"Ad {args.ad_id} not found.", adId=args.ad_id)
+    ad_type = ads[0].get("adType")
+    if ad_type == "banner":
+        _fail_msg(f"Ad {args.ad_id} is an image banner; use banner-update --status instead.",
+                  adId=args.ad_id, adType=ad_type)
+
+    update: dict = {"id": args.ad_id, "adType": _AD_TYPE_FOR_UPDATE.get(ad_type, ad_type),
+                    "status": args.status}
+    data = _api_call("ads.update", [[update]], user_id)
     new_ids = data.get("newAdIds", [])
     if args.json:
         _output_json({"updated": True, "adId": args.ad_id, "newAdIds": new_ids})

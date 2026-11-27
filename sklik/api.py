@@ -229,11 +229,15 @@ def _ensure_limits(user_id: int | None) -> dict:
     try:
         # _throttle=False: avoids recursing back into the throttle (this call is
         # itself counted by _record_request, just not pre-checked).
-        data = _api_call("api.limits", user_id=user_id, _throttle=False)
-        lim = data.get("limits", {}) or {}
-        minute = int(lim.get("minuteRequestLimit") or minute)
-        day = int(lim.get("dayRequestLimit") or day)
-        page = int(lim.get("statsDataLimit") or page)
+        # No user_id: limits belong to the login, and api.limits rejects a
+        # managed userId with 400. _soft=True: a failure must not print an
+        # error onto stdout, where it would corrupt the command's --json output.
+        data = _api_call("api.limits", _throttle=False, _soft=True)
+        if data.get("status") in (200, 206):
+            lim = data.get("limits", {}) or {}
+            minute = int(lim.get("minuteRequestLimit") or minute)
+            day = int(lim.get("dayRequestLimit") or day)
+            page = int(lim.get("statsDataLimit") or page)
     except SystemExit:
         pass  # transient api.limits failure — keep fallbacks, retry next day
 
