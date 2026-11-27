@@ -248,7 +248,7 @@ Souhrn celého účtu **jedním voláním**, místo řetězení `account` + `cam
 |--------|-------------------|
 | `ads` | `--group-id`, `--campaign-id`, `--json` |
 | `ad-create` | `--group-id`, `--headline1/2/3`, `--description1/2` (alias `--description`), `--final-url`, `--path1/2`, `--json` |
-| `ad-update` | `--ad-id`, `--status`, `--json` (jen stav, na místě) |
+| `ad-update` | `--ad-id`, `--status`, `--json` (jen stav, na místě; textové, nativní i dynamické bannery, obrázkové bannery přes `banner-update`) |
 | `ad-replace` | `--ad-id`, `--headline1/2/3`, `--description/--description2`, `--final-url`, `--path1/2`, `--json` |
 | `ad-remove` | `--ad-id`, `--confirm`, `--json` |
 | `ad-stats` | `--group-id`, `--date-from`, `--date-to`, `--granularity …`, `--json` |

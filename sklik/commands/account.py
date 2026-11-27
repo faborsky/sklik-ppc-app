@@ -68,7 +68,8 @@ def cmd_account(args: argparse.Namespace) -> None:
 def cmd_api_limits(args: argparse.Namespace) -> None:
     """Show the account's API limits (rate limits, batch caps, value ranges)
     plus the local request-budget usage tracked across sessions."""
-    data = _api_call("api.limits", user_id=getattr(args, "user_id", None), _throttle=False)
+    # Limits belong to the login; api.limits rejects a managed userId (400).
+    data = _api_call("api.limits", _throttle=False)
     limits = data.get("limits", {}) or {}
     batch = data.get("batchCallLimits", []) or []
 

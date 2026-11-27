@@ -2,6 +2,13 @@
 
 Verze aplikace je v `sklik/__init__.py` (`__version__`, SemVer). Formát vychází z [Keep a Changelog](https://keepachangelog.com/). Datum je vydání dané verze.
 
+## [Nevydáno] — opravy `api.limits` s `--user-id` a `ad-update` u nativních reklam
+
+Přispěl grunapavel-dev.
+
+- **OPRAVENO: `api.limits` se volá bez `userId`.** Limity patří přihlášení a s `--user-id` spravovaného účtu API vracelo `400`. Selhalo tím `api-limits` a chybová hláška z kontroly limitů se dostala i do výstupu `--json` jiných příkazů. Teď se limity čtou bez `userId` a selhání výstup nezmění, CLI pojede s výchozími limity.
+- **OPRAVENO: `ad-update --status` u nativních (kombinovaných) reklam.** API bez typu reklamy vracelo `406 not_allowed_for_campaign_type`. Příkaz si typ nejdřív načte a pošle ho se stavem (u dynamických bannerů jako `dynamicBanner`); obrázkový banner odmítne s odkazem na `banner-update`.
+
 ## [1.13.0] — 2026-11-06 — SEM konverze přes Fénix (`sem-*`) a kombinace publik (`retargeting-combination*`)
 
 Obojí přispěl grunapavel-dev (PR #10 a #11, nabídka v issue #8).
