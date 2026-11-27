@@ -25,6 +25,7 @@ endpoint keeps DRAK conventions while the rest of Fénix does not:
 from __future__ import annotations
 
 import argparse
+import os
 import re
 import sys
 import urllib.parse
@@ -49,6 +50,31 @@ _STAT_METRICS = frozenset({
 # Per-request caps from the OpenAPI spec: loading extra per-item data makes the
 # call much slower, so the API lowers the page size for it.
 _SHOP_ITEM_LIMITS = {"plain": 3000, "search_info": 300, "product_detail": 50}
+
+
+def _zbozi_shops() -> list[dict]:
+    """[{premiseId, campaignName}] from the account's Zboží campaigns."""
+    data = fenix.call("GET", "/sklik/campaigns/",
+                      {"a": ["id", "name", "status", "zboziPremiseId"], "type": "zbozi"})
+    return [{"premiseId": c.get("zboziPremiseId"), "campaignName": c.get("name")}
+            for c in data.get("items") or [] if c.get("zboziPremiseId")]
+
+
+def _premise(args: argparse.Namespace) -> int:
+    """`--premise-id`, else the configured default, else the account's only shop.
+
+    The shop is auto-detected from the account's Zboží campaign, so on an
+    account with exactly one shop no premiseId has to be configured at all.
+    """
+    if args.premise_id or os.getenv(f"SKLIK_FENIX_PREMISE{fenix._env_suffix()}", "").strip():
+        return fenix.resolve_premise(args.premise_id)
+    shops = {s["premiseId"]: s for s in _zbozi_shops()}
+    if len(shops) == 1:
+        return next(iter(shops))
+    if shops:
+        _fail_msg("several Zboží shops on this account — pick one with --premise-id: "
+                  + ", ".join(f"{p} ({s['campaignName']})" for p, s in shops.items()))
+    return fenix.resolve_premise(None)  # fails with the configuration hint
 
 
 def _czk(value: float | None) -> str:
@@ -118,7 +144,7 @@ def _mask_feed_url(url: object) -> object:
 
 def cmd_feed_status(args: argparse.Namespace) -> None:
     """Feed URL, last successful import and how often it may be downloaded."""
-    premise = fenix.resolve_premise(args.premise_id)
+    premise = _premise(args)
     data = fenix.call("GET", "/nakupy/feeds/", {"premiseId": premise})
     feeds = [dict(f, feedUrl=_mask_feed_url(f["feedUrl"])) if isinstance(f, dict)
              and "feedUrl" in f else f for f in data.get("items") or []]
@@ -144,7 +170,7 @@ def cmd_feed_status(args: argparse.Namespace) -> None:
 
 def cmd_feed_diagnostics(args: argparse.Namespace) -> None:
     """Offer health: OK / error / not visible / improvable / without category."""
-    premise = fenix.resolve_premise(args.premise_id)
+    premise = _premise(args)
     d = fenix.call("GET", "/nakupy/diagnostics/item", {"premiseId": premise})
 
     if args.json:
@@ -167,7 +193,7 @@ def cmd_feed_diagnostics(args: argparse.Namespace) -> None:
 
 def cmd_nakupy_campaigns(args: argparse.Namespace) -> None:
     """Shopping campaigns with the bid multipliers DRAK cannot show."""
-    premise = fenix.resolve_premise(args.premise_id)
+    premise = _premise(args)
     data = fenix.call("GET", "/nakupy/campaigns/", {"premiseId": premise})
     camps = data.get("items") or []
 
@@ -212,7 +238,7 @@ def _print_stat_row(head: str, r: dict) -> None:
 
 def cmd_nakupy_stats(args: argparse.Namespace) -> None:
     """Shopping statistics, split by placement/device/auction type or category."""
-    premise = fenix.resolve_premise(args.premise_id)
+    premise = _premise(args)
     date_from = args.date_from or (datetime.now() - timedelta(days=30)).strftime("%Y-%m-%d")
     date_to = args.date_to or datetime.now().strftime("%Y-%m-%d")
 
@@ -288,7 +314,7 @@ def _shop_item_limit(args: argparse.Namespace) -> int:
 def cmd_shop_items(args: argparse.Namespace) -> None:
     """Feed items: pairing, per-item CPC and (with --product-detail) the auction
     position plus the CPC needed to win it."""
-    premise = fenix.resolve_premise(args.premise_id)
+    premise = _premise(args)
     limit = _shop_item_limit(args)
 
     params: dict = {"premiseId": premise}

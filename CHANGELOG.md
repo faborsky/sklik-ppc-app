@@ -2,6 +2,12 @@
 
 Verze aplikace je v `sklik/__init__.py` (`__version__`, SemVer). Formát vychází z [Keep a Changelog](https://keepachangelog.com/). Datum je vydání dané verze.
 
+## [Nevydáno] — Nákupy bez `premiseId` u účtu s jedním obchodem
+
+Přispěl grunapavel-dev.
+
+- **Nákupy příkazy** (`feed-status`, `feed-diagnostics`, `nakupy-campaigns`, `nakupy-stats`, `shop-items`) si bez `--premise-id` a bez `SKLIK_FENIX_PREMISE` zjistí obchod samy ze Zboží kampaně účtu. Má-li účet obchodů víc, chyba je vypíše i s názvy kampaní. Hodí se hlavně s `--user-id`, kde jedno výchozí `SKLIK_FENIX_PREMISE` na přihlášení nesedí na všechny spravované účty.
+
 ## [1.13.0] — 2026-11-06 — SEM konverze přes Fénix (`sem-*`) a kombinace publik (`retargeting-combination*`)
 
 Obojí přispěl grunapavel-dev (PR #10 a #11, nabídka v issue #8).

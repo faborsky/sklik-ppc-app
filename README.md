@@ -462,7 +462,7 @@ Jeden denní rozpočet sdílený více kampaněmi. Přiřazení kampaní se ří
 Seznam Nákupy (dřív Zboží.cz): feed, diagnostika položek, modifikátory nabídek a statistiky rozpadlé podle umístění. Jede přes **API Fénix** (`api.sklik.cz/v1`), což je jiné rozhraní a **jiný token** než zbytek CLI:
 
 - Vygeneruj si **Fénix refresh token** ve webovém rozhraní Skliku a vlož ho do `.env` jako `SKLIK_FENIX_REFRESH_TOKEN` (pro pojmenovaný účet `SKLIK_FENIX_REFRESH_TOKEN_<NAME>`). Token z DRAKu tu nefunguje.
-- Každé volání potřebuje `premiseId`, tedy ID **provozovny/obchodu**, ne kampaně: z `--premise-id`, nebo z `SKLIK_FENIX_PREMISE` v `.env`.
+- Každé volání potřebuje `premiseId`, tedy ID **provozovny/obchodu**, ne kampaně: z `--premise-id`, nebo z `SKLIK_FENIX_PREMISE` v `.env`. Když není ani jedno a účet má jediný obchod na Zboží, zjistí se sám ze Zboží kampaně (víc obchodů = chyba se seznamem).
 - Přístupový token (platnost 1 h) se cachuje v `.fenix_cache_<account>.json`. `--user-id` funguje i tady (Fénix bere spravovaný účet už při vydání tokenu).
 
 | Příkaz | Klíčové přepínače |
