@@ -2,6 +2,13 @@
 
 Verze aplikace je v `sklik/__init__.py` (`__version__`, SemVer). Formát vychází z [Keep a Changelog](https://keepachangelog.com/). Datum je vydání dané verze.
 
+## [Nevydáno] — vylučující slova kampaně po dávkách, se sítí
+
+Přispěl grunapavel-dev.
+
+- **NOVÉ: `negatives-campaign`, `negative-campaign-add`, `negative-campaign-remove`** (API Fénix). Vylučující slova na úrovni kampaně po dávkách: `--keywords-json` s libovolným počtem slov, přidání stávající slova nepřepíše a duplicity přeskočí, mazání vypíše nenalezená. `fenix-negative-*` dělají totéž po jednom slově.
+- **Síť (`--network fulltext|context`)** podle Fénixu 1.40.0: výpis ukazuje síť, duplicity se posuzují podle sítě, **mazání bez `--network` maže z obou sítí**. Kampaň přijme jen síť svého typu: obsahová odmítne `fulltext` chybou `403 network_not_allowed_for_campaign_type` (ověřeno živě 22. 11. 2026 na pozastavené testovací kampani).
+
 ## [1.13.0] — 2026-11-06 — SEM konverze přes Fénix (`sem-*`) a kombinace publik (`retargeting-combination*`)
 
 Obojí přispěl grunapavel-dev (PR #10 a #11, nabídka v issue #8).
